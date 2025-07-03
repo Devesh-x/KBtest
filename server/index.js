@@ -1,9 +1,9 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const MegaTicTacToe = require('./Controllers/MegaTicTacToe.js');
-const SnakesAndLadders = require('./Controllers/SnakesAndLadders.js');
-const TowerOfHanoi = require('./Controllers/TowerOfHanoi.js');
+const MegaTicTacToe = require('./controllers/MegaTicTacToe.js');
+const SnakesAndLadders = require('./controllers/SnakesAndLadders.js');
+const TowerOfHanoi = require('./controllers/TowerOfHanoi.js');
 
 const app = express();
 const server = http.createServer(app);
