@@ -1,3 +1,4 @@
+const { v4: uuidv4 } = require('uuid');
 const socket_io_1 = require("socket.io");
 
 // Board Configuration
@@ -64,11 +65,13 @@ class SnakesAndLadders {
                 ip: socket.handshake.address,
                 connectedAt: new Date(),
             });
-            console.log(`[SERVER] New connection: ${socket.id} from ${socket.handshake.address}`);
+            console.log(`[SnakesAndLadders] New connection: ${socket.id} from ${socket.handshake.address}`);
         });
     }
-    createRoom(socket, roomId, playerName, callback = () => { }) {
+    createRoom(socket, data, playerName, callback = () => { }) {
         try {
+            // Use provided roomId or generate a new one
+            const roomId = data.roomId || uuidv4();
             if (this.rooms.has(roomId)) {
                 callback({ error: 'Room already exists' });
                 return;
@@ -79,7 +82,7 @@ class SnakesAndLadders {
                 gameState,
             });
             socket.join(roomId);
-            console.log(`[SERVER] Room ${roomId} created by ${socket.id}`);
+            console.log(`[SnakesAndLadders] Room ${roomId} created by ${socket.id} (${playerName})`);
             callback({
                 success: true,
                 roomId,
@@ -93,7 +96,7 @@ class SnakesAndLadders {
         }
         catch (error) {
             callback({ error: error.message });
-            console.error('[CREATE ROOM ERROR]', error);
+            console.error('[SnakesAndLadders CREATE ROOM ERROR]', error);
         }
     }
     joinRoom(socket, roomId, playerName, callback = () => { }) {
@@ -118,7 +121,7 @@ class SnakesAndLadders {
             room.players.push(socket.id);
             room.gameState.players.push(newPlayer);
             socket.join(roomId);
-            console.log(`[SERVER] Player ${socket.id} joined room ${roomId}`);
+            console.log(`[SnakesAndLadders] Player ${socket.id} joined room ${roomId}`);
             callback({
                 success: true,
                 roomId,
@@ -132,7 +135,7 @@ class SnakesAndLadders {
         }
         catch (error) {
             callback({ error: error.message });
-            console.error('[JOIN ROOM ERROR]', error);
+            console.error('[SnakesAndLadders JOIN ROOM ERROR]', error);
         }
     }
     handleRollDice(socket, { roomId }) {
@@ -222,7 +225,7 @@ class SnakesAndLadders {
                 gameState: room.gameState,
                 currentTurn: room.gameState.currentTurn,
             });
-            console.log(`[ROLL] ${currentPlayer.name} rolled ${diceRoll} in room ${roomId}`);
+            console.log(`[SnakesAndLadders] ${currentPlayer.name} rolled ${diceRoll} in room ${roomId}`);
         }, 1000);
     }
     handleReset(socket, { roomId }) {
@@ -234,7 +237,7 @@ class SnakesAndLadders {
             gameState: room.gameState,
             currentTurn: room.gameState.currentTurn,
         });
-        console.log(`[RESET] Room ${roomId} reset`);
+        console.log(`[SnakesAndLadders] Room ${roomId} reset`);
     }
     handleDisconnect(socket) {
         this.activeConnections.delete(socket.id);
@@ -245,7 +248,7 @@ class SnakesAndLadders {
                 room.gameState.players.splice(playerIndex, 1);
                 if (room.players.length === 0) {
                     this.rooms.delete(roomId);
-                    console.log(`[ROOM DELETED] Room ${roomId} deleted due to all players disconnecting`);
+                    console.log(`[SnakesAndLadders] Room ${roomId} deleted due to all players disconnecting`);
                 }
                 else {
                     room.gameState.message = {
@@ -261,7 +264,7 @@ class SnakesAndLadders {
                         currentTurn: room.gameState.currentTurn,
                         message: 'A player has disconnected',
                     });
-                    console.log(`[DISCONNECT] Player ${socket.id} disconnected from room ${roomId}`);
+                    console.log(`[SnakesAndLadders] Player ${socket.id} disconnected from room ${roomId}`);
                 }
                 break;
             }
