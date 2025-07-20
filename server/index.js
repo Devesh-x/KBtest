@@ -1,11 +1,11 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const TowerOfHanoi = require('./Controllers/TowerOfHanoi');
-const SnakesAndLadders = require('./Controllers/SnakesAndLadders');
-const MegaTicTacToe = require('./Controllers/MegaTicTacToe');
-const MathSudoku = require('./Controllers/MathSudoku');
-const CheckersController = require('./Controllers/Checkers');
+const TowerOfHanoi = require('./controllers/TowerOfHanoi');
+const SnakesAndLadders = require('./controllers/SnakesAndLadders');
+const MegaTicTacToe = require('./controllers/MegaTicTacToe');
+const MathSudoku = require('./controllers/MathSudoku');
+const CheckersController = require('./controllers/Checkers');
 
 const app = express();
 const server = http.createServer(app);
