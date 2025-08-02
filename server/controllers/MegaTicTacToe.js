@@ -61,39 +61,46 @@ class MegaTicTacToe {
         }
     }
 
-    joinRoom(socket, roomId, playerName, callback = () => {}) {
-        try {
-            const room = this.rooms.get(roomId);
+    joinRoom(socket, data, callback = () => {}) {
+    try {
+        const { roomId, playerName } = data || {};
 
-            if (!room) {
-                callback({ error: 'Room does not exist' });
-                return;
-            }
-            if (room.players.length >= 2) {
-                callback({ error: 'Room is full' });
-                return;
-            }
-
-            room.players.push({ socketId: socket.id, playerName: playerName || 'Player 2' });
-            socket.join(roomId);
-            console.log(`[MegaTicTacToe] Player ${socket.id} (${playerName}) joined room ${roomId}`);
-
-            callback({
-                success: true,
-                roomId,
-                player: 'O',
-                gameState: room.gameState,
-            });
-
-            this.io.to(roomId).emit('game_start', {
-                gameState: room.gameState,
-                currentPlayer: room.currentPlayer,
-            });
-        } catch (error) {
-            callback({ error: error.message });
-            console.error('[MegaTicTacToe JOIN ROOM ERROR]', error);
+        if (!roomId || !playerName) {
+            callback({ error: 'roomId and playerName are required' });
+            return;
         }
+
+        const room = this.rooms.get(roomId);
+
+        if (!room) {
+            callback({ error: 'Room does not exist' });
+            return;
+        }
+        if (room.players.length >= 2) {
+            callback({ error: 'Room is full' });
+            return;
+        }
+
+        room.players.push({ socketId: socket.id, playerName });
+        socket.join(roomId);
+        console.log(`[MegaTicTacToe] Player ${socket.id} (${playerName}) joined room ${roomId}`);
+
+        callback({
+            success: true,
+            roomId,
+            player: 'O',
+            gameState: room.gameState,
+        });
+
+        this.io.to(roomId).emit('game_start', {
+            gameState: room.gameState,
+            currentPlayer: room.currentPlayer,
+        });
+    } catch (error) {
+        callback({ error: error.message });
+        console.error('[MegaTicTacToe JOIN ROOM ERROR]', error);
     }
+}
 
     handleMove(socket, { roomId, boardIndex, cellIndex }, callback = () => {}) {
     console.log(`[MegaTicTacToe] Handling move for socket ${socket.id} in room ${roomId}: boardIndex ${boardIndex}, cellIndex ${cellIndex}`);
