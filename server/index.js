@@ -1,3 +1,4 @@
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -73,7 +74,7 @@ io.on('connection', socket => {
     console.log('[CREATE ROOM RAW] Received raw data:', data);
     // Handle both array-wrapped and direct object data
     const eventData = Array.isArray(data) && data.length > 1 ? data[1] : data;
-    const { game, playerName, size, level, color, difficulty, numDisks } = typeof eventData === 'object' ? eventData : {};
+    const { game, playerName, size, level, color, difficulty, numDisks, roomId } = typeof eventData === 'object' ? eventData : {};
 
     if (!game || !playerName) {
       console.error(`[CREATE ROOM ERROR] Missing required parameters for socket ${socket.id}`);
@@ -103,7 +104,7 @@ io.on('connection', socket => {
         callback(response);
       });
     } else if (game === 'MegaTicTacToe') {
-      megaTicTacToe.createRoom(socket, { roomId: '', playerName }, (response) => {
+      megaTicTacToe.createRoom(socket, { roomId: roomId || '', playerName }, (response) => {
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for MegaTicTacToe by ${playerName}`);
         } else {
