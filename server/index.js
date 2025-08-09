@@ -74,6 +74,9 @@ io.on('connection', socket => {
     console.log('[CREATE ROOM RAW] Received raw data:', data);
     // Handle both array-wrapped and direct object data
     const eventData = Array.isArray(data) && data.length > 1 ? data[1] : data;
+    
+
+    //previous
     const { game, playerName, size, level, color, difficulty, numDisks, roomId } = typeof eventData === 'object' ? eventData : {};
 
     if (!game || !playerName) {
@@ -95,7 +98,10 @@ io.on('connection', socket => {
         callback(response);
       });
     } else if (game === 'SnakesAndLadders') {
-      snakesAndLadders.createRoom(socket, { roomId: '', playerName }, playerName, (response) => {
+
+      //previous
+     // snakesAndLadders.createRoom(socket, { roomId: '', playerName }, playerName, (response) => {
+          snakesAndLadders.createRoom(socket, { roomId: roomId || '', playerName }, playerName, (response) => {
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for SnakesAndLadders by ${playerName}`);
         } else {
@@ -105,6 +111,7 @@ io.on('connection', socket => {
       });
     } else if (game === 'MegaTicTacToe') {
       megaTicTacToe.createRoom(socket, { roomId: roomId || '', playerName }, (response) => {
+        
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for MegaTicTacToe by ${playerName}`);
         } else {
@@ -113,7 +120,8 @@ io.on('connection', socket => {
         callback(response);
       });
     } else if (game === 'MathSudoku') {
-      mathSudoku.createRoom(socket, { roomId: uuidv4(), size: size || 9, level: level || 'medium', playerName }, (response) => {
+      // mathSudoku.createRoom(socket, { roomId: uuidv4(), size: size || 9, level: level || 'medium', playerName }, (response) => {
+         mathSudoku.createRoom(socket, { roomId: roomId || uuidv4(), size: size || 9, level: level || 'medium', playerName }, (response) => {
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for MathSudoku by ${playerName}`);
         } else {
@@ -131,7 +139,8 @@ io.on('connection', socket => {
         callback(response);
       });
     } else if (game === 'Ludo') {
-      ludo.createRoom(socket, { roomId: '', playerName }, (response) => {
+      // ludo.createRoom(socket, { roomId: '', playerName }, (response) => {
+        ludo.createRoom(socket, { roomId: roomId || '', playerName }, (response) => {
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for Ludo by ${playerName}`);
         } else {

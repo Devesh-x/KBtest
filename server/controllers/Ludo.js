@@ -105,11 +105,53 @@ class Ludo {
 
       console.log(`[Ludo] New connection: ${socket.id} from ${socket.handshake.address}`);
 
-      //socket.on('createRoom', (data, callback) => this.createRoom(socket, data, callback));
-      socket.on('joinRoom', (data, callback) => this.joinRoom(socket, data.roomId, data.playerName, callback));
-      socket.on('rollDice', (data, callback) => this.handleRollDice(socket, data, callback));
-      socket.on('movePiece', (data, callback) => this.handleMovePiece(socket, data, callback));
-      socket.on('restartGame', (data) => this.handleRestart(socket, data));
+      // IMPORTANT: Guard generic event names so they don't intercept other games.
+      // The central router in server/index.js already routes by `game`.
+      socket.on('createRoom', (data, callback) => {
+        try {
+          if (!data || data.game !== 'Ludo') return; // Ignore non-Ludo events
+          this.createRoom(socket, data, callback);
+        } catch (e) {
+          // no-op
+        }
+      });
+
+      socket.on('joinRoom', (data, callback) => {
+        try {
+          if (!data || data.game !== 'Ludo') return; // Ignore non-Ludo events
+          this.joinRoom(socket, data.roomId, data.playerName, callback);
+        } catch (e) {
+          // no-op
+        }
+      });
+
+      socket.on('rollDice', (data, callback) => {
+        try {
+          if (!data || data.game !== 'Ludo') return; // Ignore non-Ludo events
+          this.handleRollDice(socket, data, callback);
+        } catch (e) {
+          // no-op
+        }
+      });
+
+      socket.on('movePiece', (data, callback) => {
+        try {
+          if (!data || data.game !== 'Ludo') return; // Ignore non-Ludo events
+          this.handleMovePiece(socket, data, callback);
+        } catch (e) {
+          // no-op
+        }
+      });
+
+      socket.on('restartGame', (data) => {
+        try {
+          if (!data || data.game !== 'Ludo') return; // Ignore non-Ludo events
+          this.handleRestart(socket, data);
+        } catch (e) {
+          // no-op
+        }
+      });
+
       socket.on('disconnect', () => this.handleDisconnect(socket));
     });
   }
