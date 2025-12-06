@@ -55,7 +55,12 @@ io.on('connection', socket => {
     timestamp: new Date().toISOString(),
   });
   console.log(`[EMIT] connection_verified sent to ${socket.id}`);
+  
+  socket.on("latencyTest", (data) => {
+    socket.emit("latencyResult", data);
+  });
 
+  
   socket.on('error', error => {
     console.error(`[SOCKET ERROR] ${socket.id}:`, error);
   });
