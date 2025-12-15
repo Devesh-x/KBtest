@@ -9,7 +9,7 @@ const MathSudoku = require('./controllers/MathSudoku');
 const CheckersController = require('./controllers/Checkers');
 const Ludo = require('./controllers/Ludo');
 const Sudoku = require('./controllers/Sudoku');
-const RPS = require('./Controllers/RPS.js'); // 1. IMPORT RPS
+const RPS = require('./controllers/RPS.js'); // 1. IMPORT RPS
 const WordWorm = require('./controllers/wordWorm.js'); // <-- 1. path corrected to lowercase 'w'
 
 const app = express();
