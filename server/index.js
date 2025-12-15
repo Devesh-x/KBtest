@@ -23,7 +23,6 @@ const io = new Server(server, {
   pingTimeout: 60000,
   pingInterval: 25000,
   cookie: false,
-  allowEIO3: true,
 });
 
 io.engine.on('connection_error', err => {
