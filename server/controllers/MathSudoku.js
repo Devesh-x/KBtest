@@ -165,210 +165,221 @@ class MathSudoku {
   }
 
   // Create a new game room
- createRoom(socket, { roomId, size, level, playerName }, callback = () => {}) {
-  try {
-    // Use provided roomId (from client) or generate a new short room code
-    const finalRoomId = (roomId && roomId.trim() !== '') ? roomId : this.generateRoomCode();
-    console.log(`[MathSudoku] Creating room - received roomId: "${roomId}", using finalRoomId: "${finalRoomId}"`);
-    
-    if (this.rooms.has(finalRoomId)) {
-      callback({ error: 'Room already exists' });
-      return;
+  createRoom(socket, { roomId, size, level, playerName }, callback = () => { }) {
+    try {
+      // Use provided roomId (from client) or generate a new short room code
+      // However, if the client is buggy and sends empty string, we want to auto-generate a UUID or short code.
+      // The previous implementation used generateRoomCode() which is short (6 chars).
+      // Let's stick to generateRoomCode for consistency with existing main server logic, 
+      // BUT we must ensure it isn't empty.
+
+      let finalRoomId = roomId;
+      if (!finalRoomId || finalRoomId.trim() === '') {
+        finalRoomId = this.generateRoomCode(); // Auto-generate if missing
+        console.log(`[MathSudoku] Generated new roomId: ${finalRoomId}`);
+      } else {
+        // If provided, use it
+        console.log(`[MathSudoku] Creating room - received roomId: "${roomId}"`);
+      }
+
+      if (this.rooms.has(finalRoomId)) {
+        callback({ error: 'Room already exists' });
+        return;
+      }
+
+      const gameState = this.initializeGameState(size, level);
+      gameState.playerNames.player1 = playerName || 'Player1';
+
+      this.rooms.set(finalRoomId, {
+        players: [{ socketId: socket.id, playerName, role: 'player1' }],
+        gameState,
+      });
+
+      socket.join(finalRoomId);
+      console.log(`[MathSudoku] Room ${finalRoomId} created by ${socket.id} (${playerName})`);
+
+      callback({
+        success: true,
+        roomId: finalRoomId,
+        playerRole: 'player1',
+        gameState,
+      });
+
+      socket.emit('start game', {
+        gameState,
+        player: 'player1',
+        playerName,
+        roomId: finalRoomId,
+      });
+    } catch (error) {
+      callback({ error: error.message });
+      console.error('[MathSudoku CREATE ROOM ERROR]', error);
     }
-
-    const gameState = this.initializeGameState(size, level);
-    gameState.playerNames.player1 = playerName || 'Player1';
-    
-    this.rooms.set(finalRoomId, {
-      players: [{ socketId: socket.id, playerName, role: 'player1' }],
-      gameState,
-    });
-
-    socket.join(finalRoomId);
-    console.log(`[MathSudoku] Room ${finalRoomId} created by ${socket.id} (${playerName})`);
-
-    callback({
-      success: true,
-      roomId: finalRoomId,
-      playerRole: 'player1',
-      gameState,
-    });
-
-    socket.emit('start game', {
-      gameState,
-      player: 'player1',
-      playerName,
-      roomId: finalRoomId,
-    });
-  } catch (error) {
-    callback({ error: error.message });
-    console.error('[MathSudoku CREATE ROOM ERROR]', error);
   }
-}
   // Join an existing room
- joinRoom(socket, { roomId, playerName }, callback = () => {}) {
-  try {
-    if (!roomId) {
-      callback({ error: 'Room ID is required' });
+  joinRoom(socket, { roomId, playerName }, callback = () => { }) {
+    try {
+      if (!roomId) {
+        callback({ error: 'Room ID is required' });
+        return;
+      }
+
+      // Make room ID case-insensitive by converting to uppercase
+      const normalizedRoomId = roomId.toUpperCase();
+      console.log(`[MathSudoku] Looking for room with normalized ID: ${normalizedRoomId}`);
+
+      // Find room with case-insensitive matching
+      let room = null;
+      let actualRoomId = null;
+      for (const [key, value] of this.rooms.entries()) {
+        if (key.toUpperCase() === normalizedRoomId) {
+          room = value;
+          actualRoomId = key;
+          break;
+        }
+      }
+
+      if (!room) {
+        console.log(`[MathSudoku] Available rooms: ${Array.from(this.rooms.keys()).join(', ')}`);
+        callback({ error: 'Room does not exist' });
+        return;
+      }
+      if (room.players.length >= 2) {
+        callback({ error: 'Room is full' });
+        return;
+      }
+
+      room.players.push({ socketId: socket.id, playerName, role: 'player2' });
+      room.gameState.playerNames.player2 = playerName || 'Player2';
+      socket.join(actualRoomId);
+      console.log(`[MathSudoku] Player ${socket.id} (${playerName}) joined room ${actualRoomId}`);
+
+      callback({
+        success: true,
+        roomId: actualRoomId,
+        playerRole: 'player2',
+        gameState: room.gameState,
+      });
+
+      // Emit start game to both players - similar to Tower of Hanoi
+      this.io.to(actualRoomId).emit('start game', {
+        gameState: room.gameState,
+        roomId: actualRoomId,
+        currentPlayer: room.gameState.currentPlayer,
+      });
+    } catch (error) {
+      callback({ error: error.message });
+      console.error('[MathSudoku JOIN ROOM ERROR]', error);
+    }
+  }
+  // Handle player move
+  handleMove(socket, { roomId, row, col, num }, callback = () => { }) {
+    console.log(`[MathSudoku] Handling move for socket ${socket.id} in room ${roomId}: [${row},${col}] = ${num}`);
+
+    const room = this.rooms.get(roomId);
+    if (!room || room.gameState.gameState !== 'playing') {
+      const errorMsg = 'Invalid move or game not active';
+      socket.emit('moveError', { message: errorMsg });
+      callback({ error: errorMsg });
       return;
     }
-    
-    // Make room ID case-insensitive by converting to uppercase
-    const normalizedRoomId = roomId.toUpperCase();
-    console.log(`[MathSudoku] Looking for room with normalized ID: ${normalizedRoomId}`);
-    
-    // Find room with case-insensitive matching
-    let room = null;
-    let actualRoomId = null;
-    for (const [key, value] of this.rooms.entries()) {
-      if (key.toUpperCase() === normalizedRoomId) {
-        room = value;
-        actualRoomId = key;
-        break;
+
+    const player = room.players.find(p => p.socketId === socket.id);
+    if (!player) {
+      const errorMsg = 'Player not in room';
+      socket.emit('moveError', { message: errorMsg });
+      callback({ error: errorMsg });
+      return;
+    }
+
+    const { gameState } = room;
+
+    // Check if it's the player's turn (turn-based like Tower of Hanoi)
+    if (gameState.currentPlayer !== player.role) {
+      const errorMsg = 'Not your turn';
+      console.log(`[MathSudoku] Invalid move by ${socket.id}: ${errorMsg}`);
+      socket.emit('moveError', { message: errorMsg });
+      callback({ error: errorMsg });
+      return;
+    }
+
+    const playerGrid = gameState.playerGrids[player.role];
+
+    // Prevent modifying prefilled cells
+    if (gameState.puzzleGrid[row][col] !== 0) {
+      const errorMsg = 'Cannot modify prefilled cell';
+      socket.emit('moveError', { message: errorMsg });
+      callback({ error: errorMsg });
+      return;
+    }
+
+    // Update player grid immediately
+    playerGrid[row][col] = num;
+
+    // Switch turns after each move (turn-based like Tower of Hanoi)
+    gameState.currentPlayer = gameState.currentPlayer === 'player1' ? 'player2' : 'player1';
+
+    // Check if move is correct against solution grid (for lives deduction)
+    const isCorrect = num === 0 || num === gameState.solution[row][col];
+    if (!isCorrect && num !== 0) {
+      gameState.lives[player.role] = Math.max(0, gameState.lives[player.role] - 1);
+      if (gameState.lives[player.role] === 0) {
+        gameState.gameState = 'lost';
+        gameState.winner = room.players.find(p => p.role !== player.role).playerName;
       }
     }
-    
-    if (!room) {
-      console.log(`[MathSudoku] Available rooms: ${Array.from(this.rooms.keys()).join(', ')}`);
-      callback({ error: 'Room does not exist' });
-      return;
-    }
-    if (room.players.length >= 2) {
-      callback({ error: 'Room is full' });
-      return;
+
+    // Check if player has solved the puzzle (only if not clearing a cell)
+    if (num !== 0) {
+      const isSolved = playerGrid.every((row, r) =>
+        row.every((cell, c) => cell === gameState.solution[r][c])
+      );
+      if (isSolved) {
+        gameState.gameState = 'won';
+        gameState.winner = player.playerName;
+      }
     }
 
-    room.players.push({ socketId: socket.id, playerName, role: 'player2' });
-    room.gameState.playerNames.player2 = playerName || 'Player2';
-    socket.join(actualRoomId);
-    console.log(`[MathSudoku] Player ${socket.id} (${playerName}) joined room ${actualRoomId}`);
-
-    callback({
-      success: true,
-      roomId: actualRoomId,
-      playerRole: 'player2',
-      gameState: room.gameState,
+    // Broadcast updated game state with current player info
+    this.io.to(roomId).emit('update game', {
+      gameState,
+      currentPlayer: gameState.currentPlayer,
+      move: { row, col, num, playerName: player.playerName },
     });
 
-    // Emit start game to both players - similar to Tower of Hanoi
-    this.io.to(actualRoomId).emit('start game', {
-      gameState: room.gameState,
-      roomId: actualRoomId,
-      currentPlayer: room.gameState.currentPlayer,
-    });
-  } catch (error) {
-    callback({ error: error.message });
-    console.error('[MathSudoku JOIN ROOM ERROR]', error);
-  }
-}
-  // Handle player move
-handleMove(socket, { roomId, row, col, num }, callback = () => {}) {
-  console.log(`[MathSudoku] Handling move for socket ${socket.id} in room ${roomId}: [${row},${col}] = ${num}`);
-  
-  const room = this.rooms.get(roomId);
-  if (!room || room.gameState.gameState !== 'playing') {
-    const errorMsg = 'Invalid move or game not active';
-    socket.emit('moveError', { message: errorMsg });
-    callback({ error: errorMsg });
-    return;
+    console.log(`[MathSudoku] Move by ${player.playerName} in room ${roomId}: [${row},${col}] = ${num}, next turn: ${gameState.currentPlayer}`);
+    callback({ success: true, gameState, currentPlayer: gameState.currentPlayer });
   }
 
-  const player = room.players.find(p => p.socketId === socket.id);
-  if (!player) {
-    const errorMsg = 'Player not in room';
-    socket.emit('moveError', { message: errorMsg });
-    callback({ error: errorMsg });
-    return;
-  }
+  // Validate cage constraints
+  validateCage(cage, values) {
+    // Remove any null or undefined values (in case some cells are not yet filled)
+    const filledValues = values.filter(v => v !== 0 && v !== null && v !== undefined);
 
-  const { gameState } = room;
-  
-  // Check if it's the player's turn (turn-based like Tower of Hanoi)
-  if (gameState.currentPlayer !== player.role) {
-    const errorMsg = 'Not your turn';
-    console.log(`[MathSudoku] Invalid move by ${socket.id}: ${errorMsg}`);
-    socket.emit('moveError', { message: errorMsg });
-    callback({ error: errorMsg });
-    return;
-  }
-
-  const playerGrid = gameState.playerGrids[player.role];
-
-  // Prevent modifying prefilled cells
-  if (gameState.puzzleGrid[row][col] !== 0) {
-    const errorMsg = 'Cannot modify prefilled cell';
-    socket.emit('moveError', { message: errorMsg });
-    callback({ error: errorMsg });
-    return;
-  }
-
-  // Update player grid immediately
-  playerGrid[row][col] = num;
-
-  // Switch turns after each move (turn-based like Tower of Hanoi)
-  gameState.currentPlayer = gameState.currentPlayer === 'player1' ? 'player2' : 'player1';
-
-  // Check if move is correct against solution grid (for lives deduction)
-  const isCorrect = num === 0 || num === gameState.solution[row][col];
-  if (!isCorrect && num !== 0) {
-    gameState.lives[player.role] = Math.max(0, gameState.lives[player.role] - 1);
-    if (gameState.lives[player.role] === 0) {
-      gameState.gameState = 'lost';
-      gameState.winner = room.players.find(p => p.role !== player.role).playerName;
+    // For single-cell cages
+    if (cage.operation === '') {
+      return filledValues.length === 1 && filledValues[0] === cage.target;
     }
-  }
 
-  // Check if player has solved the puzzle (only if not clearing a cell)
-  if (num !== 0) {
-    const isSolved = playerGrid.every((row, r) =>
-      row.every((cell, c) => cell === gameState.solution[r][c])
-    );
-    if (isSolved) {
-      gameState.gameState = 'won';
-      gameState.winner = player.playerName;
+    // For multi-cell cages, check if all cells are filled
+    if (filledValues.length !== cage.cells.length) {
+      return true; // Allow partial cage filling until all cells are filled
     }
-  }
 
-  // Broadcast updated game state with current player info
-  this.io.to(roomId).emit('update game', {
-    gameState,
-    currentPlayer: gameState.currentPlayer,
-    move: { row, col, num, playerName: player.playerName },
-  });
-
-  console.log(`[MathSudoku] Move by ${player.playerName} in room ${roomId}: [${row},${col}] = ${num}, next turn: ${gameState.currentPlayer}`);
-  callback({ success: true, gameState, currentPlayer: gameState.currentPlayer });
-}
-
-// Validate cage constraints
-validateCage(cage, values) {
-  // Remove any null or undefined values (in case some cells are not yet filled)
-  const filledValues = values.filter(v => v !== 0 && v !== null && v !== undefined);
-  
-  // For single-cell cages
-  if (cage.operation === '') {
-    return filledValues.length === 1 && filledValues[0] === cage.target;
+    if (cage.operation === '+') {
+      return filledValues.reduce((sum, v) => sum + v, 0) === cage.target;
+    }
+    if (cage.operation === '*') {
+      return filledValues.reduce((prod, v) => prod * v, 1) === cage.target;
+    }
+    if (cage.operation === '-') {
+      return Math.abs(filledValues[0] - filledValues[1]) === cage.target;
+    }
+    if (cage.operation === '/') {
+      return Math.max(...filledValues) / Math.min(...filledValues) === cage.target;
+    }
+    return true;
   }
-
-  // For multi-cell cages, check if all cells are filled
-  if (filledValues.length !== cage.cells.length) {
-    return true; // Allow partial cage filling until all cells are filled
-  }
-
-  if (cage.operation === '+') {
-    return filledValues.reduce((sum, v) => sum + v, 0) === cage.target;
-  }
-  if (cage.operation === '*') {
-    return filledValues.reduce((prod, v) => prod * v, 1) === cage.target;
-  }
-  if (cage.operation === '-') {
-    return Math.abs(filledValues[0] - filledValues[1]) === cage.target;
-  }
-  if (cage.operation === '/') {
-    return Math.max(...filledValues) / Math.min(...filledValues) === cage.target;
-  }
-  return true;
-}
   // Handle hint request
   handleHint(socket, { roomId }) {
     const room = this.rooms.get(roomId);

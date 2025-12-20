@@ -31,7 +31,7 @@ class TowerOfHanoi {
         return [tower1, [], []];
     }
 
-    createRoom(socket, data, callback = () => {}) {
+    createRoom(socket, data, callback = () => { }) {
         try {
             const { roomId: clientRoomId, numDisks = 3, playerName } = data;
             if (numDisks < 3 || numDisks > 10) {
@@ -71,7 +71,7 @@ class TowerOfHanoi {
                 gameState,
             });
 
-            socket.emit('start game', {
+            this.io.to(roomId).emit('start game', {
                 gameState,
                 roomId,
                 player: 'Player1',
@@ -82,7 +82,7 @@ class TowerOfHanoi {
         }
     }
 
-    joinRoom(socket, data, callback = () => {}) {
+    joinRoom(socket, data, callback = () => { }) {
         try {
             const { roomId, playerName } = data;
             const room = this.rooms.get(roomId);
@@ -96,22 +96,36 @@ class TowerOfHanoi {
                 return;
             }
 
-            room.players.push(socket.id);
-            room.gameState.playerNames.Player2 = playerName || 'Player2';
+            const playerRole = room.players[0] === socket.id ? 'Player1' : 'Player2';
+            if (playerRole === 'Player2' && room.players.length === 1) {
+                room.players.push(socket.id);
+                room.gameState.playerNames.Player2 = playerName || 'Player2';
+            } else if (playerRole === 'Player1' && room.players.length === 1 && room.players[0] === socket.id) {
+                // Already in room, ignore join request, proceed to callback
+            } else {
+                // Fallback for rejoining logic, assumes the player is either P1 or P2 socket ID
+                if (room.players.length === 1) {
+                    room.players.push(socket.id);
+                    room.gameState.playerNames.Player2 = playerName || 'Player2';
+                }
+            }
+
             socket.join(roomId);
             console.log(`[TowerOfHanoi] Player ${socket.id} joined room ${roomId}`);
+
+            const assignedRole = room.players.indexOf(socket.id) === 0 ? 'Player1' : 'Player2';
 
             callback({
                 success: true,
                 roomId,
-                player: 'Player2',
+                player: assignedRole,
                 gameState: room.gameState,
             });
 
             this.io.to(roomId).emit('start game', {
                 gameState: room.gameState,
                 roomId,
-                currentPlayer: room.gameState.currentPlayer,
+                player: assignedRole,
             });
         } catch (error) {
             callback({ error: error.message });
@@ -119,7 +133,7 @@ class TowerOfHanoi {
         }
     }
 
-    handleMove(socket, { roomId, fromTower, toTower }, callback = () => {}) {
+    handleMove(socket, { roomId, fromTower, toTower }, callback = () => { }) {
         console.log(`[TowerOfHanoi] Handling move for socket ${socket.id} in room ${roomId}: fromTower ${fromTower}, toTower ${toTower}`);
         try {
             const room = this.rooms.get(roomId);
@@ -139,7 +153,14 @@ class TowerOfHanoi {
                 return;
             }
 
-            const playerRole = room.players[0] === socket.id ? 'Player1' : 'Player2';
+            const playerRole = room.players[0] === socket.id ? 'Player1' : (room.players[1] === socket.id ? 'Player2' : null);
+            if (!playerRole) {
+                const errorMsg = 'Player not in room';
+                socket.emit('moveError', { message: errorMsg });
+                callback({ error: errorMsg });
+                return;
+            }
+
             if (room.gameState.currentPlayer !== playerRole) {
                 const errorMsg = 'Not your turn';
                 console.log(`[TowerOfHanoi] Invalid move by ${socket.id}: ${errorMsg}`);
@@ -246,7 +267,7 @@ class TowerOfHanoi {
         console.log(`[TowerOfHanoi] Room ${roomId} restarted`);
     }
 
-    handleUndo(socket, { roomId }, callback = () => {}) {
+    handleUndo(socket, { roomId }, callback = () => { }) {
         console.log(`[TowerOfHanoi] Handling undo for socket ${socket.id} in room ${roomId}`);
         try {
             const room = this.rooms.get(roomId);
@@ -286,35 +307,62 @@ class TowerOfHanoi {
         }
     }
 
-    handleReconnect(socket, { roomId, playerId }, callback = () => {}) {
+    handleReconnect(socket, { roomId, playerId }, callback = () => { }) {
         try {
             const room = this.rooms.get(roomId);
             if (!room) {
                 callback({ error: 'Room not found' });
                 return;
             }
-            if (!room.players.includes(playerId)) {
+            // Check if the reconnecting player is P1 or P2 (by their original ID)
+            const playerIndex = room.players.indexOf(playerId);
+            if (playerIndex === -1) {
+                // If playerId is not the current socket.id in the array, check the other player's old ID
+                const potentialIndex = room.players.findIndex(id => id === playerId);
+                if (potentialIndex !== -1) {
+                    room.players[potentialIndex] = socket.id; // Update socket ID
+                    socket.join(roomId);
+                    const playerRole = potentialIndex === 0 ? 'Player1' : 'Player2';
+
+                    console.log(`[TowerOfHanoi] Player ${socket.id} reconnected to room ${roomId} as ${playerId} (${playerRole})`);
+
+                    callback({
+                        success: true,
+                        roomId,
+                        player: playerRole,
+                        gameState: room.gameState,
+                    });
+
+                    this.io.to(roomId).emit('update game', { // Use update game for passive reconnect
+                        gameState: room.gameState,
+                        currentPlayer: room.gameState.currentPlayer,
+                    });
+                    return;
+                }
+
                 callback({ error: 'Player not in room' });
                 return;
             }
 
-            // Update socket ID for the reconnecting player
-            const playerIndex = room.players.indexOf(playerId);
-            room.players[playerIndex] = socket.id;
+            // Update socket ID for the reconnecting player (if socket.id is different from playerId)
+            if (room.players[playerIndex] !== socket.id) {
+                room.players[playerIndex] = socket.id;
+            }
 
             socket.join(roomId);
-            console.log(`[TowerOfHanoi] Player ${socket.id} reconnected to room ${roomId} as ${playerId}`);
+            const playerRole = playerIndex === 0 ? 'Player1' : 'Player2';
+
+            console.log(`[TowerOfHanoi] Player ${socket.id} reconnected to room ${roomId} as ${playerId} (${playerRole})`);
 
             callback({
                 success: true,
                 roomId,
-                player: playerIndex === 0 ? 'Player1' : 'Player2',
+                player: playerRole,
                 gameState: room.gameState,
             });
 
-            socket.emit('start game', {
+            this.io.to(roomId).emit('update game', {
                 gameState: room.gameState,
-                roomId,
                 currentPlayer: room.gameState.currentPlayer,
             });
         } catch (error) {
@@ -323,7 +371,7 @@ class TowerOfHanoi {
         }
     }
 
-    handleLeaveGame(socket, { roomId, playerId }, callback = () => {}) {
+    handleLeaveGame(socket, { roomId, playerId }, callback = () => { }) {
         try {
             const room = this.rooms.get(roomId);
             if (!room) {
@@ -331,27 +379,50 @@ class TowerOfHanoi {
                 return;
             }
 
-            const playerIndex = room.players.indexOf(playerId);
+            const playerIndex = room.players.indexOf(socket.id);
             if (playerIndex === -1) {
-                callback({ error: 'Player not in room' });
-                return;
+                // Check if the player is identified by the playerId (original ID)
+                const originalPlayerIndex = room.players.findIndex(id => id === playerId);
+                if (originalPlayerIndex === -1) {
+                    callback({ error: 'Player not in room' });
+                    return;
+                }
             }
 
-            room.players.splice(playerIndex, 1);
-            console.log(`[TowerOfHanoi] Player ${playerId} left room ${roomId}`);
+            // Determine which index to remove (using socket.id is safer)
+            const indexToRemove = room.players.indexOf(socket.id);
+            if (indexToRemove === -1) {
+                // If the socket is somehow gone but we still have the original ID, remove by original ID
+                const originalIndexToRemove = room.players.findIndex(id => id === playerId);
+                if (originalIndexToRemove !== -1) {
+                    room.players.splice(originalIndexToRemove, 1);
+                } else {
+                    callback({ error: 'Player not found by socket.id or playerId' });
+                    return;
+                }
+            } else {
+                room.players.splice(indexToRemove, 1);
+            }
+
+            socket.leave(roomId);
+            console.log(`[TowerOfHanoi] Player ${playerId} (socket ${socket.id}) left room ${roomId}`);
 
             if (room.players.length === 0) {
                 this.rooms.delete(roomId);
                 console.log(`[TowerOfHanoi] Room ${roomId} deleted due to all players leaving`);
             } else {
+                // Determine who left to announce the winner
+                const playerRoleThatLeft = indexToRemove === 0 ? 'Player1' : 'Player2';
+                const winnerRole = playerRoleThatLeft === 'Player1' ? 'Player2' : 'Player1';
+
                 room.gameState.gameOver = true;
-                room.gameState.winner = playerIndex === 0 ? 'Player2' : 'Player1';
+                room.gameState.winner = winnerRole;
                 this.io.to(roomId).emit('show result', {
                     winner: room.gameState.winner,
                     moves: room.gameState.moves,
                 });
                 this.io.to(roomId).emit('opponentDisconnected', {
-                    message: 'Opponent left the game',
+                    message: `Opponent (${playerRoleThatLeft}) left the game. You win!`,
                 });
             }
 
@@ -367,13 +438,25 @@ class TowerOfHanoi {
         for (const [roomId, room] of this.rooms.entries()) {
             const playerIndex = room.players.indexOf(socket.id);
             if (playerIndex !== -1) {
+                // If P1 disconnects, we need to shift P2 to P1's index if P2 exists, or just remove P1.
                 room.players.splice(playerIndex, 1);
+
                 if (room.players.length === 0) {
                     this.rooms.delete(roomId);
                     console.log(`[TowerOfHanoi] Room ${roomId} deleted due to all players disconnecting`);
                 } else {
+                    // Announce the winner if the opponent disconnected
+                    const playerRoleThatLeft = playerIndex === 0 ? 'Player1' : 'Player2';
+                    const winnerRole = playerRoleThatLeft === 'Player1' ? 'Player2' : 'Player1';
+
+                    room.gameState.gameOver = true;
+                    room.gameState.winner = winnerRole;
+                    this.io.to(roomId).emit('show result', {
+                        winner: room.gameState.winner,
+                        moves: room.gameState.moves,
+                    });
                     this.io.to(roomId).emit('opponentDisconnected', {
-                        message: 'Opponent disconnected',
+                        message: `Opponent (${playerRoleThatLeft}) disconnected. You win!`,
                     });
                     console.log(`[TowerOfHanoi] Player ${socket.id} disconnected from room ${roomId}`);
                 }

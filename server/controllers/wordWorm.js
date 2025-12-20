@@ -165,7 +165,7 @@ class WordWorm {
 
   // --- Socket Event Handlers ---
 
-  createRoom(socket, { playerName }, callback = () => {}) {
+  createRoom(socket, { playerName }, callback = () => { }) {
     try {
       const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
       const gameState = this.initializeGameState();
@@ -190,7 +190,7 @@ class WordWorm {
     }
   }
 
-  joinRoom(socket, { roomId, playerName }, callback = () => {}) {
+  joinRoom(socket, { roomId, playerName }, callback = () => { }) {
     try {
       const room = this.rooms.get(roomId);
       if (!room) {

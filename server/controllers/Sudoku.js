@@ -1,6 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
 
-// Reusing helper functions from the React Native Sudoku component
+// --- Sudoku Logic (copied from your Sudoku.tsx) ---
+// These functions are needed to generate the game on the server.
+
 function createEmptyBoard() {
     return Array.from({ length: 9 }, () => Array(9).fill(0));
 }
@@ -53,7 +55,8 @@ function generateSolvedBoard() {
 }
 
 function removeCells(board, difficulty) {
-    let cellsToRemove = difficulty === 'Easy' ? 30 : difficulty === 'Medium' ? 40 : 50;
+    let cellsToRemove =
+        difficulty === 'Easy' ? 30 : difficulty === 'Medium' ? 40 : 50;
     const newBoard = board.map(row => row.slice());
     while (cellsToRemove > 0) {
         const i = Math.floor(Math.random() * 9);
@@ -66,232 +69,210 @@ function removeCells(board, difficulty) {
     return newBoard;
 }
 
+function getCellKey(row, col) {
+    return `${row}-${col}`;
+}
+// --- End of Sudoku Logic ---
+
 class Sudoku {
     constructor(io) {
         this.io = io;
-        this.rooms = new Map();
-        this.activeConnections = new Map();
+        this.rooms = {}; // Store game states (using Object instead of Map, per user provided code)
 
+        // Explicit connection handling not needed in constructor if methods are called from index.js
+        // but useful if we manage it internally.
         io.on('connection', (socket) => {
-            if (this.activeConnections.has(socket.id)) {
-                socket.disconnect(true);
-                return;
-            }
-
-            this.activeConnections.set(socket.id, {
-                ip: socket.handshake.address,
-                connectedAt: new Date(),
-            });
-
-            console.log(`[Sudoku] New connection: ${socket.id} from ${socket.handshake.address}`);
+            this.handleConnection(socket);
         });
     }
 
-    createRoom(socket, data, callback = () => {}) {
-        try {
-            const { roomId: clientRoomId, playerName, difficulty = 'Medium' } = data || {};
-            const roomId = clientRoomId || uuidv4();
+    // Generates a new game state
+    _createNewGameState(difficulty) {
+        const solutionBoard = generateSolvedBoard();
+        const puzzleBoard = removeCells(solutionBoard, difficulty);
+        const board = puzzleBoard.map(row => row.slice()); // Working board
 
-            if (this.rooms.has(roomId)) {
-                callback({ error: 'Room already exists' });
-                return;
-            }
-
-            const solvedBoard = generateSolvedBoard();
-            const puzzleBoard = removeCells(solvedBoard, difficulty);
-            const gameState = this.initializeGameState(puzzleBoard, solvedBoard, difficulty);
-
-            this.rooms.set(roomId, {
-                players: [{ socketId: socket.id, playerName: playerName || 'Player 1' }],
-                gameState,
-                currentPlayerIndex: 0,
-            });
-
-            socket.join(roomId);
-            console.log(`[Sudoku] Room ${roomId} created by ${socket.id} (${playerName}) with ${difficulty} difficulty`);
-
-            callback({
-                success: true,
-                roomId,
-                player: 'Player 1',
-                gameState,
-            });
-
-            socket.emit('game_start', {
-                gameState,
-                currentPlayer: gameState.currentPlayer,
-            });
-        } catch (error) {
-            callback({ error: error.message });
-            console.error('[Sudoku CREATE ROOM ERROR]', error);
-        }
-    }
-
-    joinRoom(socket, roomId, playerName, callback = () => {}) {
-        try {
-            const room = this.rooms.get(roomId);
-
-            if (!room) {
-                callback({ error: 'Room does not exist' });
-                return;
-            }
-            if (room.players.length >= 2) {
-                callback({ error: 'Room is full' });
-                return;
-            }
-
-            room.players.push({ socketId: socket.id, playerName: playerName || 'Player 2' });
-            socket.join(roomId);
-            console.log(`[Sudoku] Player ${socket.id} (${playerName}) joined room ${roomId}`);
-
-            callback({
-                success: true,
-                roomId,
-                player: 'Player 2',
-                gameState: room.gameState,
-            });
-
-            this.io.to(roomId).emit('game_start', {
-                gameState: room.gameState,
-                currentPlayer: room.gameState.currentPlayer,
-            });
-        } catch (error) {
-            callback({ error: error.message });
-            console.error('[Sudoku JOIN ROOM ERROR]', error);
-        }
-    }
-
-    handleMove(socket, { roomId, row, col, num }, callback = () => {}) {
-        try {
-            const room = this.rooms.get(roomId);
-            if (!room) {
-                const errorMsg = 'Room not found';
-                socket.emit('moveError', { message: errorMsg });
-                callback({ error: errorMsg });
-                return;
-            }
-            if (room.gameState.gameOver) {
-                const errorMsg = 'Game over';
-                socket.emit('moveError', { message: errorMsg });
-                callback({ error: errorMsg });
-                return;
-            }
-
-            const playerIndex = room.players.findIndex(p => p.socketId === socket.id);
-            if (playerIndex !== room.currentPlayerIndex) {
-                const errorMsg = 'Not your turn';
-                socket.emit('moveError', { message: errorMsg });
-                callback({ error: errorMsg });
-                return;
-            }
-
-            const { gameState } = room;
-            if (gameState.puzzleBoard[row][col] !== 0) {
-                const errorMsg = 'Cell is prefilled';
-                socket.emit('moveError', { message: errorMsg });
-                callback({ error: errorMsg });
-                return;
-            }
-
-            const correctNum = gameState.solutionBoard[row][col];
-            gameState.board[row][col] = num;
-
-            if (num === correctNum) {
-                gameState.errorCells.delete(`${row}-${col}`);
-                gameState.lives = Math.min(gameState.lives + 1, 3); // Reward correct move
-            } else {
-                gameState.errorCells.add(`${row}-${col}`);
-                gameState.lives = Math.max(gameState.lives - 1, 0);
-            }
-
-            if (gameState.lives <= 0) {
-                gameState.gameOver = true;
-                gameState.winner = null; // Loss due to no lives
-            } else {
-                // Check for completion
-                let isComplete = true;
-                for (let r = 0; r < 9; r++) {
-                    for (let c = 0; c < 9; c++) {
-                        if (gameState.board[r][c] !== gameState.solutionBoard[r][c]) {
-                            isComplete = false;
-                            break;
-                        }
-                    }
-                    if (!isComplete) break;
-                }
-                if (isComplete) {
-                    gameState.gameOver = true;
-                    gameState.winner = 'Both Players'; // Collaborative win
-                }
-            }
-
-            room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
-            gameState.currentPlayer = room.players[room.currentPlayerIndex].playerName;
-
-            this.io.to(roomId).emit('gameUpdate', {
-                gameState,
-                currentPlayer: gameState.currentPlayer,
-            });
-
-            callback({ success: true, gameState, currentPlayer: gameState.currentPlayer });
-        } catch (error) {
-            console.error('[Sudoku HANDLE MOVE ERROR]', error);
-            socket.emit('moveError', { message: 'Server error' });
-            callback({ error: 'Server error' });
-        }
-    }
-
-    handleRestart(socket, { roomId }) {
-        const room = this.rooms.get(roomId);
-        if (!room) return;
-
-        const { difficulty } = room.gameState;
-        const solvedBoard = generateSolvedBoard();
-        const puzzleBoard = removeCells(solvedBoard, difficulty);
-        room.gameState = this.initializeGameState(puzzleBoard, solvedBoard, difficulty);
-        room.currentPlayerIndex = 0;
-        room.gameState.currentPlayer = room.players[0].playerName;
-
-        this.io.to(roomId).emit('gameRestarted', {
-            gameState: room.gameState,
-            currentPlayer: room.gameState.currentPlayer,
-        });
-
-        console.log(`[Sudoku] Room ${roomId} restarted`);
-    }
-
-    handleDisconnect(socket) {
-        this.activeConnections.delete(socket.id);
-        for (const [roomId, room] of this.rooms.entries()) {
-            const playerIndex = room.players.findIndex(player => player.socketId === socket.id);
-            if (playerIndex !== -1) {
-                room.players.splice(playerIndex, 1);
-                if (room.players.length === 0) {
-                    this.rooms.delete(roomId);
-                    console.log(`[Sudoku] Room ${roomId} deleted due to all players disconnecting`);
-                } else {
-                    this.io.to(roomId).emit('playerDisconnected', {
-                        message: 'Opponent disconnected',
-                    });
-                    console.log(`[Sudoku] Player ${socket.id} disconnected from room ${roomId}`);
-                }
-                break;
-            }
-        }
-    }
-
-    initializeGameState(puzzleBoard, solutionBoard, difficulty) {
         return {
-            board: puzzleBoard.map(row => row.slice()),
-            puzzleBoard: puzzleBoard.map(row => row.slice()),
-            solutionBoard: solutionBoard.map(row => row.slice()),
-            currentPlayer: null, // Set after player assignment
+            board: board,
+            solutionBoard: solutionBoard,
+            puzzleBoard: puzzleBoard,
+            lives: 6, // Shared pool of 6 lives for 2 players
+            errorCells: [], // Use an array for JSON serializability
             gameOver: false,
-            winner: null,
-            lives: 3,
-            errorCells: new Set(),
-            difficulty,
+            difficulty: difficulty,
         };
+    }
+
+    // Attaches disconnect listener
+    handleConnection(socket) {
+        socket.on('disconnect', () => {
+            this.handleDisconnect(socket);
+        });
+    }
+
+    // Handles player leaving
+    handleDisconnect(socket) {
+        console.log(`[SUDOKU] Socket ${socket.id} disconnected.`);
+        // Find the room this socket was in
+        const roomId = Object.keys(this.rooms).find(roomId =>
+            this.rooms[roomId].players.some(p => p.id === socket.id),
+        );
+
+        if (roomId && this.rooms[roomId]) {
+            // Remove the player
+            this.rooms[roomId].players = this.rooms[roomId].players.filter(
+                p => p.id !== socket.id,
+            );
+
+            if (this.rooms[roomId].players.length === 0) {
+                // If room is empty, delete it
+                console.log(`[SUDOKU] Deleting empty room ${roomId}`);
+                delete this.rooms[roomId];
+            } else {
+                // Notify remaining player
+                console.log(`[SUDOKU] Player left room ${roomId}`);
+                this.io
+                    .to(roomId)
+                    .emit('playerDisconnected', {
+                        message: 'The other player has disconnected.',
+                    });
+            }
+        }
+    }
+
+    // Creates a new room
+    createRoom(socket, data, callback) {
+        let { roomId, playerName, difficulty = 'Medium' } = data;
+
+        // Auto-generate Room ID if missing (Robustness Fix)
+        if (!roomId) {
+            roomId = uuidv4();
+            console.log(`[SUDOKU] Auto-generated Room ID: ${roomId}`);
+        }
+
+        if (this.rooms[roomId]) {
+            return callback({ error: 'Room already exists' });
+        }
+
+        console.log(
+            `[SUDOKU] Creating room ${roomId} for ${playerName} (Difficulty: ${difficulty})`,
+        );
+
+        const gameState = this._createNewGameState(difficulty);
+
+        this.rooms[roomId] = {
+            id: roomId,
+            players: [{ id: socket.id, name: playerName }],
+            gameState: gameState,
+        };
+
+        socket.join(roomId);
+        callback({ success: true, roomId, gameState });
+    }
+
+    // Joins an existing room
+    joinRoom(socket, data, callback) {
+        const { roomId, playerName } = data;
+
+        if (!roomId) {
+            return callback({ error: 'Room ID is required' });
+        }
+
+        const room = this.rooms[roomId];
+
+        if (!room) {
+            return callback({ error: 'Room not found' });
+        }
+
+        if (room.players.length >= 2) {
+            return callback({ error: 'Room is full' });
+        }
+
+        console.log(`[SUDOKU] ${playerName} joining room ${roomId}`);
+
+        room.players.push({ id: socket.id, name: playerName });
+        socket.join(roomId);
+
+        // 1. Send success and game state to the joining player
+        callback({ success: true, roomId, gameState: room.gameState });
+
+        // 2. Notify all players (including creator) that game is starting
+        // This is what SudokuWaiting.tsx listens for
+        this.io.to(roomId).emit('player_joined', {
+            message: `${playerName} has joined. The game is starting!`,
+            players: room.players.map(p => p.name),
+            gameState: room.gameState, // Send the state to the creator
+        });
+    }
+
+    // Handles a player's move
+    makeMove(socket, data, callback) {
+        const { roomId, row, col, num } = data;
+        const room = this.rooms[roomId];
+
+        if (!room) {
+            return callback({ error: 'Room not found' });
+        }
+
+        const { gameState } = room;
+
+        if (gameState.gameOver) {
+            return callback({ error: 'Game is already over' });
+        }
+
+        // --- Update Game State ---
+        const correctNum = gameState.solutionBoard[row][col];
+        const cellKey = getCellKey(row, col);
+
+        gameState.board[row][col] = num;
+
+        const errorSet = new Set(gameState.errorCells);
+
+        if (num === correctNum) {
+            // Correct move
+            errorSet.delete(cellKey);
+        } else {
+            // Incorrect move
+            errorSet.add(cellKey);
+            gameState.lives = Math.max(0, gameState.lives - 1);
+        }
+
+        gameState.errorCells = Array.from(errorSet); // Convert back to array
+
+        // --- Check for Win/Loss ---
+        let isComplete = true;
+        if (gameState.lives <= 0) {
+            gameState.gameOver = true;
+        } else {
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    if (
+                        gameState.board[r][c] === 0 ||
+                        gameState.board[r][c] !== gameState.solutionBoard[r][c]
+                    ) {
+                        isComplete = false;
+                        break;
+                    }
+                }
+                if (!isComplete) break;
+            }
+        }
+
+        if (isComplete) {
+            gameState.gameOver = true;
+        }
+
+        // --- Broadcast updated state ---
+        // Acknowledge the move
+        callback({ success: true });
+
+        // Send the new state to everyone in the room
+        this.io.to(roomId).emit('gameUpdate', { gameState: room.gameState });
+
+        if (gameState.gameOver) {
+            console.log(`[SUDOKU] Game over in room ${roomId}`);
+            // You could emit a specific 'game_over' event here if needed
+        }
     }
 }
 

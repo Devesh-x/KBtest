@@ -18,9 +18,12 @@ const io = new Server(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST'],
-    credentials: true,
+    // credentials: true,
+    credentials: false, // Explicitly false for wildcard origin
   },
-  pingTimeout: 60000,
+  allowEIO3: true, // Compatibility for React Native
+  transports: ['websocket', 'polling'], // Fallback support
+  pingTimeout: 120000, // Increased to 2m to prevent premature disconnects
   pingInterval: 25000,
   cookie: false,
 });
@@ -55,6 +58,16 @@ io.on('connection', socket => {
   console.log(
     `[CONNECT] Socket ${socket.id} connected from ${socket.handshake.address}`,
   );
+
+  // --- APPLICATION LEVEL HEARTBEAT (Added fix) ---
+  const heartbeatInterval = setInterval(() => {
+    socket.emit('heartbeat', { time: Date.now() });
+  }, 10000);
+
+  socket.on('disconnect', () => {
+    clearInterval(heartbeatInterval);
+    console.log(`[DISCONNECT] Socket ${socket.id} disconnected`);
+  });
 
   // *** ADDED THIS LINE ***
   // This tells the Ludo controller to track this socket
@@ -228,7 +241,16 @@ io.on('connection', socket => {
       // 4. ADD RPS CASE
       rps.createRoom(socket, eventData, callback);
     }
-    else {
+    else if (game === 'WordWorm') {
+      wordWorm.createRoom(socket, { playerName }, (response) => {
+        if (response.success) {
+          console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for WordWorm by ${playerName}`);
+        } else {
+          console.log(`[CREATE ROOM FAILURE] Failed for ${playerName} in WordWorm:`, response.error);
+        }
+        callback(response);
+      });
+    } else {
       console.error(`[CREATE ROOM ERROR] Unknown game: ${game} for socket ${socket.id}`);
       socket.emit('error', { message: `Unknown game: ${game}` });
       callback({ error: `Unknown game: ${game}` });
@@ -306,7 +328,16 @@ io.on('connection', socket => {
       // 5. ADD RPS CASE
       rps.joinRoom(socket, eventData, callback);
     }
-     else {
+    else if (game === 'WordWorm') {
+      wordWorm.joinRoom(socket, { roomId, playerName }, (response) => {
+        if (response.success) {
+          console.log(`[JOIN ROOM SUCCESS] Socket ${socket.id} joined room ${roomId} for WordWorm as ${playerName}`);
+        } else {
+          console.log(`[JOIN ROOM FAILURE] Failed for ${playerName} in room ${roomId}:`, response.error);
+        }
+        callback(response);
+      });
+    } else {
       console.error(`[JOIN ROOM ERROR] Unknown game: ${game} for socket ${socket.id}`);
       socket.emit('error', { message: `Unknown game: ${game}` });
       callback({ error: `Unknown game: ${game}` });
@@ -375,7 +406,7 @@ io.on('connection', socket => {
     const { game } = eventData;
 
     if (game === 'TowerOfHanoi') {
-      towerOfHanoi.resetGame(socket, eventData, callback);
+      towerOfHanoi.handleRestart(socket, eventData, callback);
     } else if (game === 'SnakesAndLadders') {
       snakesAndLadders.resetGame(socket, eventData, callback);
     } else if (game === 'MegaTicTacToe') {
@@ -396,27 +427,83 @@ io.on('connection', socket => {
   // --- Other Listeners ---
   // (These are fine as they don't have Ludo logic)
   socket.on('undoMove', (data, callback = () => {}) => {
-    // ...
+    console.log(`[UNDO MOVE] Socket ${socket.id} undoing move:`, data);
+    const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
+    const { roomId, game } = eventData;
+    if (!roomId) { // Removed strict game check for now, can rely on trial or default
+         // But checking game is better if client sends it.
+    }
+    
+    if (game === 'TowerOfHanoi') {
+      towerOfHanoi.handleUndo(socket, { roomId }, callback);
+    } else {
+        // Fallback or error
+        console.warn(`[UNDO MOVE] Unhandled game: ${game}`);
+         if (typeof callback === 'function') callback({error: `Undo not supported for ${game}`});
+    }
   });
 
   socket.on('selectPiece', (data, callback = () => {}) => {
-    // ...
+    console.log(`[SELECT PIECE] Socket ${socket.id} selecting piece:`, data);
+    const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
+    const { roomId, row, col } = eventData; // Checkers specific
+    if (!roomId) {
+        socket.emit('error', {message: 'roomId is required'});
+        if (typeof callback === 'function') callback({error: 'roomId is required'});
+        return;
+    }
+    checkers.handleSelectPiece(socket, {roomId, row, col}, callback);
   });
 
   socket.on('hintRequest', (data, callback = () => {}) => {
-    // ...
+    console.log(`[HINT REQUEST] Socket ${socket.id} requesting hint:`, data);
+    const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
+    const { roomId, game } = eventData;
+    
+    if (game === 'MathSudoku' || (!game && roomId)) { // MathSudoku might not send game param in legacy code
+         mathSudoku.handleHint(socket, {roomId}, callback);
+    } else {
+        // ...
+    }
   });
 
   socket.on('surrender', (data, callback = () => {}) => {
-    // ...
+    console.log(`[SURRENDER] Socket ${socket.id} surrendering:`, data);
+    const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
+    const { roomId } = eventData;
+    if (roomId) {
+         checkers.handleSurrender(socket, {roomId}, callback);
+    }
   });
 
   socket.on('reconnect', (data, callback = () => {}) => {
-    // ...
+    console.log(`[RECONNECT] Socket ${socket.id} reconnecting:`, data);
+    const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
+    const { roomId, playerId } = eventData;
+    
+    if (roomId && playerId) {
+         // Currently only TowerOfHanoi uses explicit handleReconnect logic in controller
+         towerOfHanoi.handleReconnect(socket, { roomId, playerId }, callback);
+    }
   });
 
   socket.on('leaveGame', (data, callback = () => {}) => {
-    // ...
+    console.log(`[LEAVE GAME] Socket ${socket.id} leaving game:`, data);
+    const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
+    const { roomId, playerId } = eventData;
+    
+    if (roomId && playerId) {
+         towerOfHanoi.handleLeaveGame(socket, { roomId, playerId }, callback);
+    }
+  });
+
+  // --- WordWorm Specific Listeners ---
+  socket.on('wordWorm:submitWord', (data, callback = () => {}) => {
+      console.log('[WORDWORM SUBMIT] Received:', data);
+      // Data usually contains { roomId, selectedIndices }
+      // The controller's handleWordSubmit is async but doesn't return a callback response in the provided code,
+      // it emits 'wordError' or 'gameUpdate'.
+      wordWorm.handleWordSubmit(socket, data);
   });
 
   // --- Disconnect handling ---
@@ -428,7 +515,9 @@ io.on('connection', socket => {
     snakesAndLadders.handleDisconnect(socket);
     megaTicTacToe.handleDisconnect(socket);
     mathSudoku.handleDisconnect(socket);
+
     checkers.handleDisconnect(socket);
+    wordWorm.handleDisconnect(socket);
     // 7. SUDOKU DISCONNECT IS HANDLED BY sudoku.handleConnection(socket)
     // --- NO LUDO HANDLER NEEDED HERE ---
     console.log(`[DISCONNECT] Handled disconnect for ${socket.id} across all games`);
