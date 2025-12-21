@@ -59,12 +59,10 @@ io.on('connection', socket => {
   );
 
   // --- APPLICATION LEVEL HEARTBEAT (Added fix) ---
-  const heartbeatInterval = setInterval(() => {
-    socket.emit('heartbeat', { time: Date.now() });
-  }, 10000);
+
 
   socket.on('disconnect', () => {
-    clearInterval(heartbeatInterval);
+
     console.log(`[DISCONNECT] Socket ${socket.id} disconnected`);
   });
 
