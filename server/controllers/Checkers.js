@@ -5,6 +5,7 @@ class CheckersController {
     this.io = io;
     this.rooms = new Map();
     this.activeConnections = new Map();
+    this.cleanupTimeouts = new Map(); // Store timeouts for room deletion
 
     io.on('connection', (socket) => {
       if (this.activeConnections.has(socket.id)) {
@@ -86,6 +87,13 @@ class CheckersController {
       if (!room) {
         callback({ error: 'Room does not exist' });
         return;
+      }
+
+      // If room is marked for deletion, cancel it because someone joined/reconnected
+      if (this.cleanupTimeouts.has(roomId)) {
+        clearTimeout(this.cleanupTimeouts.get(roomId));
+        this.cleanupTimeouts.delete(roomId);
+        console.log(`[Checkers] Room ${roomId} deletion cancelled`);
       }
 
       if (room.players.length >= 2) {
@@ -302,22 +310,34 @@ class CheckersController {
         if (room.gameState.gameState === 'playing') {
           room.gameState.gameState = 'finished';
           room.gameState.winner = player.role === 'player1' ? 'player2' : 'player1';
+        }
 
-          // Client listens for 'player_disconnected'
-          this.io.to(roomId).emit('player_disconnected', {
-            message: `${player.playerName} disconnected`,
-            winner: room.gameState.winner
-          });
+        // Clear any pending room deletion timeout if the player is rejoining or another player is still there
+        if (this.cleanupTimeouts.has(roomId)) {
+          clearTimeout(this.cleanupTimeouts.get(roomId));
+          this.cleanupTimeouts.delete(roomId);
+          console.log(`[Checkers] Cleared pending deletion for room ${roomId} as a player disconnected/reconnected.`);
         }
 
         room.players.splice(playerIndex, 1);
-
         if (room.players.length === 0) {
-          this.rooms.delete(roomId);
-          console.log(`[Checkers] Room ${roomId} deleted due to all players disconnecting`);
+          // Grace period: Wait 60s before deleting the room in case of reconnect
+          console.log(`[Checkers] Room ${roomId} is empty. Scheduling deletion in 60s...`);
+          const timeoutId = setTimeout(() => {
+            if (this.rooms.has(roomId) && this.rooms.get(roomId).players.length === 0) {
+              this.rooms.delete(roomId);
+              this.cleanupTimeouts.delete(roomId);
+              console.log(`[Checkers] Room ${roomId} deleted due to inactivity`);
+            }
+          }, 60000);
+          this.cleanupTimeouts.set(roomId, timeoutId);
+        } else {
+          this.io.to(roomId).emit('playerDisconnected', {
+            message: 'A player disconnected',
+            playerCount: room.players.length,
+          });
+          console.log(`[Checkers] Player ${socket.id} disconnected from room ${roomId}`);
         }
-
-        console.log(`[Checkers] Player ${socket.id} (${player.playerName}) disconnected from room ${roomId}`);
         break;
       }
     }
