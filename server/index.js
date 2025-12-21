@@ -69,7 +69,7 @@ io.on('connection', socket => {
   // *** ADDED THIS LINE ***
   // This tells the Ludo controller to track this socket
   // and attach its own disconnect logic.
-  ludo.handleConnection(socket);
+  // ludo.handleConnection(socket);
   sudoku.handleConnection(socket); // 3. ADD SUDOKU's CONNECTION HANDLER
 
   rps.handleConnection(socket);
@@ -110,16 +110,19 @@ io.on('connection', socket => {
       const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
       const { game } = eventData;
 
+      /*
       if (game === 'Ludo') {
           ludo.startGame(socket, eventData, callback);
       } else {
+      */
           console.warn(`[START GAME] 'startGame' received for unhandled game: ${game}`);
           if (typeof callback === 'function') {
               callback({ error: `startGame not handled for ${game}` });
           }
-      }
+      // }
   });
 
+  /*
   socket.on('handleRollDice', (data, callback = () => {}) => {
       console.log('[LUDO ROLL] Received raw data:', data);
       const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
@@ -140,6 +143,7 @@ io.on('connection', socket => {
       // Pass to the Ludo handler
       ludo.handleRestart(socket, eventData, callback);
   });
+  */
 
   // ==========================================================
   // *** END OF NEW LUDO LISTENERS ***
