@@ -16,10 +16,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: (origin, callback) => {
+      // Allow any origin
+      callback(null, true);
+    },
     methods: ['GET', 'POST'],
-    // credentials: true,
-    credentials: false, // Explicitly false for wildcard origin
+    credentials: true,
   },
   allowEIO3: true, // Compatibility for React Native
   transports: ['websocket', 'polling'], // Fallback support

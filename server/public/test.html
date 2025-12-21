@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.io Connection Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #log { background: #f0f0f0; padding: 10px; border: 1px solid #ccc; height: 300px; overflow-y: scroll; font-family: monospace; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+    <!-- Use the socket.io client served by the server itself -->
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <h1>Socket.io Connection Test</h1>
+    <p>Status: <b id="status">Connecting...</b></p>
+    <div id="log"></div>
+
+    <script>
+        const logDiv = document.getElementById('log');
+        const statusSpan = document.getElementById('status');
+        
+        function log(msg, type = '') {
+            const div = document.createElement('div');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            if (type) div.className = type;
+            logDiv.appendChild(div);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        try {
+            log('Initializing socket...');
+            // Connect to the same origin
+            const socket = io('/', {
+                transports: ['websocket', 'polling'],
+                reconnection: true
+            });
+
+            socket.on('connect', () => {
+                log(`Connected! Socket ID: ${socket.id}`, 'success');
+                statusSpan.textContent = 'Connected';
+                statusSpan.style.color = 'green';
+            });
+
+            socket.on('connect_error', (err) => {
+                log(`Connection Error: ${err.message}`, 'error');
+                statusSpan.textContent = 'Error';
+                statusSpan.style.color = 'red';
+                console.error(err);
+            });
+
+            socket.on('disconnect', (reason) => {
+                log(`Disconnected: ${reason}`, 'error');
+                statusSpan.textContent = 'Disconnected';
+                statusSpan.style.color = 'orange';
+            });
+
+            socket.on('connection_verified', (data) => {
+                log(`Received 'connection_verified': ${JSON.stringify(data)}`, 'success');
+            });
+            
+            socket.on('heartbeat', (data) => {
+                 log(`Heartbeat: ${data.time}`);
+            });
+
+        } catch (e) {
+            log(`Script Error: ${e.message}`, 'error');
+        }
+    </script>
+</body>
+</html>
