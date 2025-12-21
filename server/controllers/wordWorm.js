@@ -1,4 +1,4 @@
-let wordListObj = require('../../src/games/letterquest/assets/words.js');
+const wordListObj = require('../assets/words.js');
 
 // --- FIX: Handle CJS/ESM module default export ---
 if (wordListObj && wordListObj.default) {
