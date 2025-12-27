@@ -77,7 +77,8 @@ function getCellKey(row, col) {
 class Sudoku {
     constructor(io) {
         this.io = io;
-        this.rooms = {}; // Store game states (using Object instead of Map, per user provided code)
+        this.rooms = {}; // Store game states
+        this.cleanupTimeouts = {}; // Store timeouts for room deletion (using Object for consistency)
 
         // Explicit connection handling not needed in constructor if methods are called from index.js
         // but useful if we manage it internally.
@@ -125,9 +126,18 @@ class Sudoku {
             );
 
             if (this.rooms[roomId].players.length === 0) {
-                // If room is empty, delete it
-                console.log(`[SUDOKU] Deleting empty room ${roomId}`);
-                delete this.rooms[roomId];
+                // Grace period: Wait 60s before deleting the room
+                console.log(`[SUDOKU] Room ${roomId} is empty. Scheduling deletion in 60s...`);
+                // Clear any existing timeout just in case
+                if (this.cleanupTimeouts[roomId]) clearTimeout(this.cleanupTimeouts[roomId]);
+
+                this.cleanupTimeouts[roomId] = setTimeout(() => {
+                    if (this.rooms[roomId] && this.rooms[roomId].players.length === 0) {
+                        console.log(`[SUDOKU] Deleting empty room ${roomId}`);
+                        delete this.rooms[roomId];
+                        delete this.cleanupTimeouts[roomId];
+                    }
+                }, 60000);
             } else {
                 // Notify remaining player
                 console.log(`[SUDOKU] Player left room ${roomId}`);
@@ -182,6 +192,13 @@ class Sudoku {
 
         if (!room) {
             return callback({ error: 'Room not found' });
+        }
+
+        // CONNECTED: Cancel any pending deletion logic
+        if (this.cleanupTimeouts[roomId]) {
+            console.log(`[SUDOKU] Room ${roomId} deletion cancelled (player joined)`);
+            clearTimeout(this.cleanupTimeouts[roomId]);
+            delete this.cleanupTimeouts[roomId];
         }
 
         if (room.players.length >= 2) {

@@ -5,6 +5,7 @@ class MathSudoku {
   constructor(io) {
     this.io = io;
     this.rooms = new Map();
+    this.cleanupTimeouts = new Map();
     this.activeConnections = new Map();
 
     io.on('connection', (socket) => {
@@ -189,6 +190,7 @@ class MathSudoku {
 
       const gameState = this.initializeGameState(size, level);
       gameState.playerNames.player1 = playerName || 'Player1';
+      gameState.roomId = finalRoomId; // Ensure roomId is part of gameState for client display
 
       this.rooms.set(finalRoomId, {
         players: [{ socketId: socket.id, playerName, role: 'player1' }],
@@ -224,6 +226,10 @@ class MathSudoku {
         return;
       }
 
+      // Clear any pending room deletion timeout if the player is rejoining
+      // We need to check cleanupTimeouts but referencing the room object logic below
+      // Actually we need to find the actualRoomId first.
+
       // Make room ID case-insensitive by converting to uppercase
       const normalizedRoomId = roomId.toUpperCase();
       console.log(`[MathSudoku] Looking for room with normalized ID: ${normalizedRoomId}`);
@@ -237,6 +243,13 @@ class MathSudoku {
           actualRoomId = key;
           break;
         }
+      }
+
+      // Grace period cleanup cancellation
+      if (actualRoomId && this.cleanupTimeouts.has(actualRoomId)) {
+        clearTimeout(this.cleanupTimeouts.get(actualRoomId));
+        this.cleanupTimeouts.delete(actualRoomId);
+        console.log(`[MathSudoku] Room ${actualRoomId} deletion cancelled`);
       }
 
       if (!room) {
@@ -466,8 +479,16 @@ class MathSudoku {
         const player = room.players[playerIndex];
         room.players.splice(playerIndex, 1);
         if (room.players.length === 0) {
-          this.rooms.delete(roomId);
-          console.log(`[MathSudoku] Room ${roomId} deleted due to all players disconnecting`);
+          // Grace period: Wait 60s before deleting the room in case of reconnect
+          console.log(`[MathSudoku] Room ${roomId} is empty. Scheduling deletion in 60s...`);
+          const timeoutId = setTimeout(() => {
+            if (this.rooms.has(roomId) && this.rooms.get(roomId).players.length === 0) {
+              this.rooms.delete(roomId);
+              this.cleanupTimeouts.delete(roomId);
+              console.log(`[MathSudoku] Room ${roomId} deleted due to inactivity`);
+            }
+          }, 60000);
+          this.cleanupTimeouts.set(roomId, timeoutId);
         } else {
           this.io.to(roomId).emit('playerDisconnected', {
             message: `Player ${player.playerName} disconnected`,
