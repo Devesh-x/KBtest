@@ -143,7 +143,7 @@ class CheckersController {
   // --- EVENT HANDLERS (Matching Client) ---
 
   // Client emits 'makeMove', server listens for 'makeMove'
-  makeMove(socket, { roomId, move }) {
+  makeMove(socket, { roomId, move }, callback = () => { }) {
     const room = this.rooms.get(roomId);
     if (!room || room.gameState.gameState !== 'playing') {
       socket.emit('error', { message: 'Game not active' });
@@ -243,6 +243,7 @@ class CheckersController {
     });
 
     console.log(`[Checkers] Move by ${player.playerName} in room ${roomId}: from [${move.from.row},${move.from.col}] to [${move.to.row},${move.to.col}]`);
+    callback({ success: true, gameState: room.gameState });
   }
 
   // Client emits 'resetGame', server listens for 'resetGame'

@@ -22,13 +22,13 @@ class MegaTicTacToe {
         });
     }
 
-    createRoom(socket, data, callback = () => {}) {
+    createRoom(socket, data, callback = () => { }) {
         try {
             const { roomId: clientRoomId, playerName } = data || {};
-            
+
             // Use client-provided roomId or generate a new one
             const roomId = clientRoomId || uuidv4();
-            
+
             if (this.rooms.has(roomId)) {
                 callback({ error: 'Room already exists' });
                 return;
@@ -61,7 +61,7 @@ class MegaTicTacToe {
         }
     }
 
-    joinRoom(socket, roomId, playerName, callback = () => {}) {
+    joinRoom(socket, roomId, playerName, callback = () => { }) {
         try {
             const room = this.rooms.get(roomId);
 
@@ -95,119 +95,119 @@ class MegaTicTacToe {
         }
     }
 
-    handleMove(socket, { roomId, boardIndex, cellIndex }, callback = () => {}) {
-    console.log(`[MegaTicTacToe] Handling move for socket ${socket.id} in room ${roomId}: boardIndex ${boardIndex}, cellIndex ${cellIndex}`);
-    try {
-        const room = this.rooms.get(roomId);
-        if (!room) {
-            const errorMsg = 'Room not found';
-            console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
-            socket.emit('moveError', { message: errorMsg });
-            callback({ error: errorMsg });
-            return;
-        }
-        if (room.gameState.gameOver) {
-            const errorMsg = 'Game over';
-            console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
-            socket.emit('moveError', { message: errorMsg });
-            callback({ error: errorMsg });
-            return;
-        }
-        const playerRole = room.players[0].socketId === socket.id ? 'X' : 'O';
-        if (room.currentPlayer !== playerRole) {
-            const errorMsg = 'Not your turn';
-            console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
-            socket.emit('moveError', { message: errorMsg });
-            callback({ error: errorMsg });
-            return;
-        }
-
-        if (boardIndex < 0 || boardIndex >= 9 || cellIndex < 0 || cellIndex >= 9) {
-            const errorMsg = `Invalid indices ${boardIndex}, ${cellIndex}`;
-            console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
-            socket.emit('moveError', { message: errorMsg });
-            callback({ error: errorMsg });
-            return;
-        }
-
-        const { gameState } = room;
-        if (gameState.board[boardIndex]?.[cellIndex] || gameState.boardWinners[boardIndex]) {
-            const errorMsg = 'Cell already taken or board won';
-            console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
-            socket.emit('moveError', { message: errorMsg });
-            callback({ error: errorMsg });
-            return;
-        }
-
-        gameState.board[boardIndex][cellIndex] = room.currentPlayer;
-
-        const winPatterns = [
-            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-            [0, 4, 8], [2, 4, 6], // Diagonals
-        ];
-
-        const smallBoard = gameState.board[boardIndex];
-        let smallWinner = null;
-        for (const pattern of winPatterns) {
-            const [a, b, c] = pattern;
-            if (smallBoard[a] && smallBoard[a] === smallBoard[b] && smallBoard[a] === smallBoard[c]) {
-                smallWinner = smallBoard[a];
-                break;
+    makeMove(socket, { roomId, boardIndex, cellIndex }, callback = () => { }) {
+        console.log(`[MegaTicTacToe] Handling move for socket ${socket.id} in room ${roomId}: boardIndex ${boardIndex}, cellIndex ${cellIndex}`);
+        try {
+            const room = this.rooms.get(roomId);
+            if (!room) {
+                const errorMsg = 'Room not found';
+                console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
+                socket.emit('moveError', { message: errorMsg });
+                callback({ error: errorMsg });
+                return;
             }
-        }
-        if (smallWinner) {
-            gameState.boardWinners[boardIndex] = smallWinner;
-        }
+            if (room.gameState.gameOver) {
+                const errorMsg = 'Game over';
+                console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
+                socket.emit('moveError', { message: errorMsg });
+                callback({ error: errorMsg });
+                return;
+            }
+            const playerRole = room.players[0].socketId === socket.id ? 'X' : 'O';
+            if (room.currentPlayer !== playerRole) {
+                const errorMsg = 'Not your turn';
+                console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
+                socket.emit('moveError', { message: errorMsg });
+                callback({ error: errorMsg });
+                return;
+            }
 
-        let megaWinner = null;
-        let winningPattern = null;
-        for (const pattern of winPatterns) {
-            const [a, b, c] = pattern;
-            if (
-                gameState.boardWinners[a] &&
-                gameState.boardWinners[a] === gameState.boardWinners[b] &&
-                gameState.boardWinners[a] === gameState.boardWinners[c]
+            if (boardIndex < 0 || boardIndex >= 9 || cellIndex < 0 || cellIndex >= 9) {
+                const errorMsg = `Invalid indices ${boardIndex}, ${cellIndex}`;
+                console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
+                socket.emit('moveError', { message: errorMsg });
+                callback({ error: errorMsg });
+                return;
+            }
+
+            const { gameState } = room;
+            if (gameState.board[boardIndex]?.[cellIndex] || gameState.boardWinners[boardIndex]) {
+                const errorMsg = 'Cell already taken or board won';
+                console.log(`[MegaTicTacToe] Invalid move by ${socket.id}: ${errorMsg}`);
+                socket.emit('moveError', { message: errorMsg });
+                callback({ error: errorMsg });
+                return;
+            }
+
+            gameState.board[boardIndex][cellIndex] = room.currentPlayer;
+
+            const winPatterns = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+                [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+                [0, 4, 8], [2, 4, 6], // Diagonals
+            ];
+
+            const smallBoard = gameState.board[boardIndex];
+            let smallWinner = null;
+            for (const pattern of winPatterns) {
+                const [a, b, c] = pattern;
+                if (smallBoard[a] && smallBoard[a] === smallBoard[b] && smallBoard[a] === smallBoard[c]) {
+                    smallWinner = smallBoard[a];
+                    break;
+                }
+            }
+            if (smallWinner) {
+                gameState.boardWinners[boardIndex] = smallWinner;
+            }
+
+            let megaWinner = null;
+            let winningPattern = null;
+            for (const pattern of winPatterns) {
+                const [a, b, c] = pattern;
+                if (
+                    gameState.boardWinners[a] &&
+                    gameState.boardWinners[a] === gameState.boardWinners[b] &&
+                    gameState.boardWinners[a] === gameState.boardWinners[c]
+                ) {
+                    megaWinner = gameState.boardWinners[a];
+                    winningPattern = pattern;
+                    break;
+                }
+            }
+
+            if (megaWinner) {
+                gameState.gameOver = true;
+                gameState.megaWinner = megaWinner;
+                gameState.winningPattern = winningPattern;
+            } else if (
+                gameState.board.every(
+                    (small, index) => gameState.boardWinners[index] || small.every(cell => cell !== null)
+                )
             ) {
-                megaWinner = gameState.boardWinners[a];
-                winningPattern = pattern;
-                break;
+                gameState.gameOver = true;
             }
+
+            let nextGrid = cellIndex;
+            const isNextGridFull = gameState.board[nextGrid]?.every(cell => cell !== null);
+            if (gameState.boardWinners[nextGrid] || isNextGridFull) {
+                nextGrid = null;
+            }
+            gameState.currentGrid = nextGrid;
+            room.currentPlayer = room.currentPlayer === 'X' ? 'O' : 'X';
+
+            this.io.to(roomId).emit('gameUpdate', {
+                gameState,
+                currentPlayer: room.currentPlayer,
+            });
+
+            console.log(`[MegaTicTacToe] Move made in room ${roomId}: ${boardIndex}, ${cellIndex}`);
+            callback({ success: true, gameState, currentPlayer: room.currentPlayer });
+        } catch (error) {
+            console.error('[MegaTicTacToe HANDLE MOVE ERROR]', error);
+            socket.emit('moveError', { message: 'Server error' });
+            callback({ error: 'Server error' });
         }
-
-        if (megaWinner) {
-            gameState.gameOver = true;
-            gameState.megaWinner = megaWinner;
-            gameState.winningPattern = winningPattern;
-        } else if (
-            gameState.board.every(
-                (small, index) => gameState.boardWinners[index] || small.every(cell => cell !== null)
-            )
-        ) {
-            gameState.gameOver = true;
-        }
-
-        let nextGrid = cellIndex;
-        const isNextGridFull = gameState.board[nextGrid]?.every(cell => cell !== null);
-        if (gameState.boardWinners[nextGrid] || isNextGridFull) {
-            nextGrid = null;
-        }
-        gameState.currentGrid = nextGrid;
-        room.currentPlayer = room.currentPlayer === 'X' ? 'O' : 'X';
-
-        this.io.to(roomId).emit('gameUpdate', {
-            gameState,
-            currentPlayer: room.currentPlayer,
-        });
-
-        console.log(`[MegaTicTacToe] Move made in room ${roomId}: ${boardIndex}, ${cellIndex}`);
-        callback({ success: true, gameState, currentPlayer: room.currentPlayer });
-    } catch (error) {
-        console.error('[MegaTicTacToe HANDLE MOVE ERROR]', error);
-        socket.emit('moveError', { message: 'Server error' });
-        callback({ error: 'Server error' });
     }
-}
 
     handleRestart(socket, { roomId }) {
         const room = this.rooms.get(roomId);

@@ -273,7 +273,7 @@ class MathSudoku {
     }
   }
   // Handle player move
-  handleMove(socket, { roomId, row, col, num }, callback = () => { }) {
+  makeMove(socket, { roomId, row, col, num }, callback = () => { }) {
     console.log(`[MathSudoku] Handling move for socket ${socket.id} in room ${roomId}: [${row},${col}] = ${num}`);
 
     const room = this.rooms.get(roomId);
