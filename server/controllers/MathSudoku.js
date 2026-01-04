@@ -288,6 +288,7 @@ class MathSudoku {
         gameState: room.gameState,
         roomId: actualRoomId,
         currentPlayer: room.gameState.currentPlayer,
+        players: room.players.map(p => ({ playerName: p.playerName, role: p.role })) // Fix: Send players so client can identify opponent
       });
 
       this.io.to(actualRoomId).emit('start game', {
@@ -304,6 +305,16 @@ class MathSudoku {
   makeMove(socket, { roomId, row, col, num }, callback = () => { }) {
     console.log(`[MathSudoku] Handling move for socket ${socket.id} in room ${roomId}: [${row},${col}] = ${num}`);
 
+    // Ensure inputs are integers (fix potential string/number mismatch)
+    const r = parseInt(row);
+    const c = parseInt(col);
+    const n = parseInt(num);
+
+    if (isNaN(r) || isNaN(c) || isNaN(n)) {
+      console.error(`[MathSudoku] Invalid input types: ${row}, ${col}, ${num}`);
+      return;
+    }
+
     // 1. Case-insensitive Room Lookup (Fixes "Not Connected" / Connection Desync)
     let room = this.rooms.get(roomId);
     if (!room) {
@@ -315,6 +326,8 @@ class MathSudoku {
         }
       }
     }
+
+
 
     if (!room || room.gameState.gameState !== 'playing') {
       const errorMsg = 'Invalid move or game not active';
@@ -348,7 +361,8 @@ class MathSudoku {
     const playerGrid = gameState.playerGrids[player.role];
 
     // Prevent modifying prefilled cells
-    if (gameState.puzzleGrid[row][col] !== 0) {
+    // Use parsed integers r, c
+    if (gameState.puzzleGrid[r][c] !== 0) {
       const errorMsg = 'Cannot modify prefilled cell';
       socket.emit('moveError', { message: errorMsg });
       callback({ error: errorMsg });
@@ -356,14 +370,14 @@ class MathSudoku {
     }
 
     // Update player grid immediately
-    playerGrid[row][col] = num;
+    playerGrid[r][c] = n;
 
-    // Switch turns after each move (turn-based like Tower of Hanoi)
-    gameState.currentPlayer = gameState.currentPlayer === 'player1' ? 'player2' : 'player1';
+    // SIMULTANEOUS PLAY: Do NOT switch turns.
+    // gameState.currentPlayer = ... (Removed)
 
     // Check if move is correct against solution grid (for lives deduction)
-    const isCorrect = num === 0 || num === gameState.solution[row][col];
-    if (!isCorrect && num !== 0) {
+    const isCorrect = n === 0 || n === gameState.solution[r][c];
+    if (!isCorrect && n !== 0) {
       gameState.lives[player.role] = Math.max(0, gameState.lives[player.role] - 1);
       if (gameState.lives[player.role] === 0) {
         gameState.gameState = 'lost';
@@ -372,9 +386,9 @@ class MathSudoku {
     }
 
     // Check if player has solved the puzzle (only if not clearing a cell)
-    if (num !== 0) {
-      const isSolved = playerGrid.every((row, r) =>
-        row.every((cell, c) => cell === gameState.solution[r][c])
+    if (n !== 0) {
+      const isSolved = playerGrid.every((row, rIdx) =>
+        row.every((cell, cIdx) => cell === gameState.solution[rIdx][cIdx])
       );
       if (isSolved) {
         gameState.gameState = 'won';
@@ -385,8 +399,8 @@ class MathSudoku {
     // Broadcast updated game state with current player info
     this.io.to(roomId).emit('update game', {
       gameState,
-      currentPlayer: gameState.currentPlayer,
-      move: { row, col, num, playerName: player.playerName },
+      currentPlayer: gameState.currentPlayer, // Should remain static or irrelevant
+      move: { row: r, col: c, num: n, playerName: player.playerName },
     });
 
     console.log(`[MathSudoku] Move by ${player.playerName} in room ${roomId}: [${row},${col}] = ${num}, next turn: ${gameState.currentPlayer}`);
