@@ -397,7 +397,7 @@ class MathSudoku {
     }
 
     // Broadcast updated game state with current player info
-    this.io.to(roomId).emit('update game', {
+    this.io.to(roomId).emit('gameUpdate', {
       gameState,
       currentPlayer: gameState.currentPlayer, // Should remain static or irrelevant
       move: { row: r, col: c, num: n, playerName: player.playerName },
