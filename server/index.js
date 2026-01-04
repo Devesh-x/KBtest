@@ -446,6 +446,20 @@ io.on('connection', socket => {
     }
   });
 
+  // --- hintRequest Listener (New) ---
+  socket.on('hintRequest', (data, callback = () => {}) => {
+    console.log(`[HINT REQUEST] Socket ${socket.id} requesting hint:`, data);
+    const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
+    const { roomId, game } = eventData;
+
+    if (game === 'MathSudoku') {
+      mathSudoku.handleHint(socket, { roomId }, callback);
+    } else {
+        console.warn(`[HINT REQUEST] Unhandled game: ${game}`);
+        if(typeof callback === 'function') callback({error: `Hints not supported for ${game}`});
+    }
+  });
+
   socket.on('selectPiece', (data, callback = () => {}) => {
     console.log(`[SELECT PIECE] Socket ${socket.id} selecting piece:`, data);
     const eventData = (Array.isArray(data) && data.length > 1 ? data[1] : data) || {};
