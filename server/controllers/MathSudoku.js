@@ -276,7 +276,20 @@ class MathSudoku {
         gameState: room.gameState,
       });
 
-      // Emit start game to both players - similar to Tower of Hanoi
+      // Emit multiple events to ensure client compatibility
+      // SudokuWaiting.tsx likely listens for 'player_joined'
+      this.io.to(actualRoomId).emit('player_joined', {
+        message: `${playerName} has joined. The game is starting!`,
+        players: room.players.map(p => p.playerName),
+        gameState: room.gameState
+      });
+
+      this.io.to(actualRoomId).emit('game_start', {
+        gameState: room.gameState,
+        roomId: actualRoomId,
+        currentPlayer: room.gameState.currentPlayer,
+      });
+
       this.io.to(actualRoomId).emit('start game', {
         gameState: room.gameState,
         roomId: actualRoomId,
