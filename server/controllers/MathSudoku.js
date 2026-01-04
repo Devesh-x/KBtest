@@ -304,7 +304,18 @@ class MathSudoku {
   makeMove(socket, { roomId, row, col, num }, callback = () => { }) {
     console.log(`[MathSudoku] Handling move for socket ${socket.id} in room ${roomId}: [${row},${col}] = ${num}`);
 
-    const room = this.rooms.get(roomId);
+    // 1. Case-insensitive Room Lookup (Fixes "Not Connected" / Connection Desync)
+    let room = this.rooms.get(roomId);
+    if (!room) {
+      const normalizedId = roomId.toUpperCase();
+      for (const [key, value] of this.rooms.entries()) {
+        if (key.toUpperCase() === normalizedId) {
+          room = value;
+          break;
+        }
+      }
+    }
+
     if (!room || room.gameState.gameState !== 'playing') {
       const errorMsg = 'Invalid move or game not active';
       socket.emit('moveError', { message: errorMsg });
@@ -323,6 +334,8 @@ class MathSudoku {
     const { gameState } = room;
 
     // Check if it's the player's turn (turn-based like Tower of Hanoi)
+    // FIX: Removing strict turn enforcement to allow simultaneous play (fixes "didn't take input")
+    /*
     if (gameState.currentPlayer !== player.role) {
       const errorMsg = 'Not your turn';
       console.log(`[MathSudoku] Invalid move by ${socket.id}: ${errorMsg}`);
@@ -330,6 +343,7 @@ class MathSudoku {
       callback({ error: errorMsg });
       return;
     }
+    */
 
     const playerGrid = gameState.playerGrids[player.role];
 
