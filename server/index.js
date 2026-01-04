@@ -216,7 +216,8 @@ io.on('connection', socket => {
         callback(response);
       });
     } else if (game === 'MathSudoku') {
-      mathSudoku.createRoom(socket, { roomId: roomId || uuidv4(), size: size || 9, level: level || 'medium', playerName }, (response) => {
+      // Pass roomId directly (undefined if missing). Controller handles generation.
+      mathSudoku.createRoom(socket, { roomId, size: size || 9, level: level || 'medium', playerName }, (response) => {
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for MathSudoku by ${playerName}`);
         } else {
@@ -225,7 +226,7 @@ io.on('connection', socket => {
         callback(response);
       });
     } else if (game === 'Checkers') {
-      checkers.createRoom(socket, { size: size || 8, difficulty: level || 'medium', playerName, color: color || 'red' }, (response) => {
+      checkers.createRoom(socket, { roomId, size: size || 8, difficulty: level || 'medium', playerName, color: color || 'red' }, (response) => {
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for Checkers by ${playerName}`);
         } else {

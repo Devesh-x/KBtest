@@ -83,17 +83,33 @@ class CheckersController {
         return;
       }
 
-      const room = this.rooms.get(roomId);
+      // 1. Try direct match
+      let room = this.rooms.get(roomId);
+      let actualRoomId = roomId;
+
+      // 2. If not found, try case-insensitive match (Fix for "Room doesn't exist")
       if (!room) {
+        const normalizedId = roomId.toUpperCase();
+        for (const [key, value] of this.rooms.entries()) {
+          if (key.toUpperCase() === normalizedId) {
+            room = value;
+            actualRoomId = key;
+            break;
+          }
+        }
+      }
+
+      if (!room) {
+        console.log(`[Checkers JOIN FAILED] Room "${roomId}" not found. Available rooms:`, Array.from(this.rooms.keys()));
         callback({ error: 'Room does not exist' });
         return;
       }
 
       // If room is marked for deletion, cancel it because someone joined/reconnected
-      if (this.cleanupTimeouts.has(roomId)) {
-        clearTimeout(this.cleanupTimeouts.get(roomId));
-        this.cleanupTimeouts.delete(roomId);
-        console.log(`[Checkers] Room ${roomId} deletion cancelled`);
+      if (this.cleanupTimeouts.has(actualRoomId)) {
+        clearTimeout(this.cleanupTimeouts.get(actualRoomId));
+        this.cleanupTimeouts.delete(actualRoomId);
+        console.log(`[Checkers] Room ${actualRoomId} deletion cancelled`);
       }
 
       if (room.players.length >= 2) {
@@ -116,8 +132,8 @@ class CheckersController {
       // Update game state to start playing
       room.gameState.gameState = 'playing';
 
-      socket.join(roomId);
-      console.log(`[Checkers] Player ${socket.id} (${playerName}) joined room ${roomId}`);
+      socket.join(actualRoomId);
+      console.log(`[Checkers] Player ${socket.id} (${playerName}) joined room ${actualRoomId}`);
 
       callback({
         success: true,
@@ -127,7 +143,7 @@ class CheckersController {
       });
 
       // Notify both players that game is starting
-      this.io.to(roomId).emit('game_start', {
+      this.io.to(actualRoomId).emit('game_start', {
         gameState: room.gameState,
         players: room.players.map(p => ({
           playerName: p.playerName,
