@@ -4,9 +4,6 @@ class TowerOfHanoi {
     constructor(io) {
         this.io = io;
         this.rooms = new Map();
-        this.activeConnections = new Map();
-
-
     }
 
     // Helper function to create initial towers with the given number of disks
@@ -434,7 +431,6 @@ class TowerOfHanoi {
     }
 
     handleDisconnect(socket) {
-        this.activeConnections.delete(socket.id);
         for (const [roomId, room] of this.rooms.entries()) {
             const playerIndex = room.players.indexOf(socket.id);
             if (playerIndex !== -1) {
