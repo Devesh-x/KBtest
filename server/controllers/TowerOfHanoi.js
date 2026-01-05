@@ -6,20 +6,7 @@ class TowerOfHanoi {
         this.rooms = new Map();
         this.activeConnections = new Map();
 
-        io.on('connection', (socket) => {
-            // Prevent duplicate connections
-            if (this.activeConnections.has(socket.id)) {
-                socket.disconnect(true);
-                return;
-            }
 
-            this.activeConnections.set(socket.id, {
-                ip: socket.handshake.address,
-                connectedAt: new Date(),
-            });
-
-            console.log(`[TowerOfHanoi] New connection: ${socket.id} from ${socket.handshake.address}`);
-        });
     }
 
     // Helper function to create initial towers with the given number of disks
@@ -71,7 +58,8 @@ class TowerOfHanoi {
                 gameState,
             });
 
-            this.io.to(roomId).emit('start game', {
+            // Notify only the creator
+            this.io.to(socket.id).emit('start game', {
                 gameState,
                 roomId,
                 player: 'Player1',
@@ -122,18 +110,30 @@ class TowerOfHanoi {
                 gameState: room.gameState,
             });
 
-            this.io.to(roomId).emit('start game', {
-                gameState: room.gameState,
-                roomId,
-                player: assignedRole,
-            });
+            // Fix: Send specific events to each player so roles don't get overwritten
+            const [p1Socket, p2Socket] = room.players;
+
+            if (p1Socket) {
+                this.io.to(p1Socket).emit('start game', {
+                    gameState: room.gameState,
+                    roomId,
+                    player: 'Player1',
+                });
+            }
+            if (p2Socket) {
+                this.io.to(p2Socket).emit('start game', {
+                    gameState: room.gameState,
+                    roomId,
+                    player: 'Player2',
+                });
+            }
         } catch (error) {
             callback({ error: error.message });
             console.error('[TowerOfHanoi JOIN ROOM ERROR]', error);
         }
     }
 
-    handleMove(socket, { roomId, fromTower, toTower }, callback = () => { }) {
+    makeMove(socket, { roomId, fromTower, toTower }, callback = () => { }) {
         console.log(`[TowerOfHanoi] Handling move for socket ${socket.id} in room ${roomId}: fromTower ${fromTower}, toTower ${toTower}`);
         try {
             const room = this.rooms.get(roomId);
