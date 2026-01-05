@@ -139,6 +139,12 @@ class TowerOfHanoi {
                     player: 'Player2',
                 });
             }
+
+            // Fix: Emit 'player_joined' so the UI updates from "Waiting..."
+            this.io.to(roomId).emit('player_joined', {
+                players: room.players,
+                gameState: room.gameState,
+            });
         } catch (error) {
             callback({ error: error.message });
             console.error('[TowerOfHanoi JOIN ROOM ERROR]', error);
@@ -300,7 +306,16 @@ class TowerOfHanoi {
     handleUndo(socket, { roomId }, callback = () => { }) {
         console.log(`[TowerOfHanoi] Handling undo for socket ${socket.id} in room ${roomId}`);
         try {
-            const room = this.rooms.get(roomId);
+            let room = this.rooms.get(roomId);
+            if (!room) {
+                const normalizedId = roomId ? roomId.toUpperCase() : '';
+                for (const [key, value] of this.rooms.entries()) {
+                    if (key.toUpperCase() === normalizedId) {
+                        room = value;
+                        break;
+                    }
+                }
+            }
             if (!room) {
                 const errorMsg = 'Room not found';
                 console.log(`[TowerOfHanoi] Invalid undo by ${socket.id}: ${errorMsg}`);
@@ -339,7 +354,16 @@ class TowerOfHanoi {
 
     handleReconnect(socket, { roomId, playerId }, callback = () => { }) {
         try {
-            const room = this.rooms.get(roomId);
+            let room = this.rooms.get(roomId);
+            if (!room) {
+                const normalizedId = roomId ? roomId.toUpperCase() : '';
+                for (const [key, value] of this.rooms.entries()) {
+                    if (key.toUpperCase() === normalizedId) {
+                        room = value;
+                        break;
+                    }
+                }
+            }
             if (!room) {
                 callback({ error: 'Room not found' });
                 return;
@@ -403,7 +427,16 @@ class TowerOfHanoi {
 
     handleLeaveGame(socket, { roomId, playerId }, callback = () => { }) {
         try {
-            const room = this.rooms.get(roomId);
+            let room = this.rooms.get(roomId);
+            if (!room) {
+                const normalizedId = roomId ? roomId.toUpperCase() : '';
+                for (const [key, value] of this.rooms.entries()) {
+                    if (key.toUpperCase() === normalizedId) {
+                        room = value;
+                        break;
+                    }
+                }
+            }
             if (!room) {
                 callback({ error: 'Room not found' });
                 return;
