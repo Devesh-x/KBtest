@@ -70,9 +70,24 @@ class TowerOfHanoi {
     joinRoom(socket, data, callback = () => { }) {
         try {
             const { roomId, playerName } = data;
-            const room = this.rooms.get(roomId);
+            console.log(`[TowerOfHanoi] Join request for room: '${roomId}' by ${socket.id}`);
+
+            // 1. Precise Case-Insensitive Lookup
+            let room = this.rooms.get(roomId);
+            if (!room) {
+                // Try finding it case-insensitively
+                const normalizedId = roomId ? roomId.toUpperCase() : '';
+                for (const [key, value] of this.rooms.entries()) {
+                    if (key.toUpperCase() === normalizedId) {
+                        room = value;
+                        console.log(`[TowerOfHanoi] Found room via case-insensitive match: '${key}' for input '${roomId}'`);
+                        break;
+                    }
+                }
+            }
 
             if (!room) {
+                console.error(`[TowerOfHanoi] Room not found: '${roomId}'. Available rooms:`, Array.from(this.rooms.keys()));
                 callback({ error: 'Room does not exist' });
                 return;
             }
