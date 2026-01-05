@@ -148,7 +148,16 @@ class TowerOfHanoi {
     makeMove(socket, { roomId, fromTower, toTower }, callback = () => { }) {
         console.log(`[TowerOfHanoi] Handling move for socket ${socket.id} in room ${roomId}: fromTower ${fromTower}, toTower ${toTower}`);
         try {
-            const room = this.rooms.get(roomId);
+            let room = this.rooms.get(roomId);
+            if (!room) {
+                const normalizedId = roomId ? roomId.toUpperCase() : '';
+                for (const [key, value] of this.rooms.entries()) {
+                    if (key.toUpperCase() === normalizedId) {
+                        room = value;
+                        break;
+                    }
+                }
+            }
             if (!room) {
                 const errorMsg = 'Room not found';
                 console.log(`[TowerOfHanoi] Invalid move by ${socket.id}: ${errorMsg}`);
@@ -257,7 +266,16 @@ class TowerOfHanoi {
     }
 
     handleRestart(socket, { roomId }) {
-        const room = this.rooms.get(roomId);
+        let room = this.rooms.get(roomId);
+        if (!room) {
+            const normalizedId = roomId ? roomId.toUpperCase() : '';
+            for (const [key, value] of this.rooms.entries()) {
+                if (key.toUpperCase() === normalizedId) {
+                    room = value;
+                    break;
+                }
+            }
+        }
         if (!room) return;
 
         room.gameState = {
