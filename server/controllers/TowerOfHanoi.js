@@ -156,17 +156,21 @@ class TowerOfHanoi {
         try {
             let room = this.rooms.get(roomId);
             if (!room) {
-                const normalizedId = roomId ? roomId.toUpperCase() : '';
+                const normalizedId = roomId ? roomId.toString().trim().toUpperCase() : '';
+                console.log(`[TowerOfHanoi DEBUG] Lookup failed for '${roomId}'. Trying normalized: '${normalizedId}'`);
+                console.log(`[TowerOfHanoi DEBUG] Available rooms: ${Array.from(this.rooms.keys()).join(', ')}`);
+
                 for (const [key, value] of this.rooms.entries()) {
-                    if (key.toUpperCase() === normalizedId) {
+                    if (key.toString().trim().toUpperCase() === normalizedId) {
                         room = value;
+                        console.log(`[TowerOfHanoi DEBUG] Found match: '${key}'`);
                         break;
                     }
                 }
             }
             if (!room) {
                 const errorMsg = 'Room not found';
-                console.log(`[TowerOfHanoi] Invalid move by ${socket.id}: ${errorMsg}`);
+                console.log(`[TowerOfHanoi] Invalid move by ${socket.id}: ${errorMsg}. ID Received: '${roomId}'`);
                 socket.emit('moveError', { message: errorMsg });
                 callback({ error: errorMsg });
                 return;
