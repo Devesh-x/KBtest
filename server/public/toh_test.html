@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower of Hanoi Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+
+        .log {
+            border: 1px solid #333;
+            padding: 10px;
+            margin-top: 10px;
+            height: 400px;
+            overflow-y: auto;
+            background: #000;
+        }
+
+        .status {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-bottom: 1px solid #333;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 5px 10px;
+            margin-right: 5px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+        }
+
+        button:hover {
+            background: #444;
+        }
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <h1>Tower of Hanoi - Logic Test</h1>
+    <div class="status" id="status">Status: Disconnected</div>
+    <div>
+        <input type="text" id="roomIdInput" value="TOH_TEST" placeholder="Room ID">
+        <button onclick="createRoom()">1. Create Room</button>
+        <button onclick="joinRoom()">2. Join Room (P2)</button>
+        <button onclick="makeMove()">3. Make Move (1->2)</button>
+        <button onclick="checkLogs()">Debug Logs</button>
+    </div>
+    <div class="log" id="log"></div>
+
+    <script>
+        const socket = io();
+        const logDiv = document.getElementById('log');
+        const statusDiv = document.getElementById('status');
+
+        // Helper logger
+        function log(msg, data = '') {
+            const el = document.createElement('div');
+            el.innerHTML = `<span style="color:#888">[${new Date().toLocaleTimeString()}]</span> ${msg} <pre>${data ? JSON.stringify(data, null, 2) : ''}</pre>`;
+            logDiv.insertBefore(el, logDiv.firstChild);
+            console.log(msg, data);
+        }
+
+        socket.on('connect', () => {
+            statusDiv.textContent = `Status: Connected (${socket.id})`;
+            log('Connected to server', { id: socket.id });
+        });
+
+        socket.on('disconnect', () => {
+            statusDiv.textContent = 'Status: Disconnected';
+            log('Disconnected from server');
+        });
+
+        socket.on('error', (err) => {
+            log('❌ ERROR EVENT:', err);
+        });
+
+        socket.on('moveError', (err) => {
+            log('❌ MOVE ERROR:', err);
+        });
+
+        socket.on('start game', (data) => {
+            log('✅ GAME STARTED:', data);
+        });
+
+        socket.on('player_joined', (data) => {
+            log('👤 PLAYER JOINED:', data);
+        });
+
+        socket.on('move made', (data) => {
+            log('✅ MOVE SUCCESS:', data);
+        });
+
+        function createRoom() {
+            const roomId = document.getElementById('roomIdInput').value;
+            const payload = {
+                game: 'TowerOfHanoi',
+                playerName: 'Tester1',
+                roomId: roomId,
+                numDisks: 3
+            };
+            log('Sending createRoom...', payload);
+            socket.emit('createRoom', payload, (response) => {
+                log('createRoom Response:', response);
+            });
+        }
+
+        function joinRoom() {
+            const roomId = document.getElementById('roomIdInput').value;
+            const payload = {
+                game: 'TowerOfHanoi', // Frontend usually sends this for join too? Standard is joinRoom with {roomId, game...}
+                roomId: roomId,
+                playerName: 'Tester2'
+            };
+            // Note: server/index.js routes 'joinRoom' based on... wait, index.js routes joinRoom too?
+            // checking index.js for joinRoom...
+            // It routes based on payload.game usually.
+            log('Sending joinRoom...', payload);
+            socket.emit('joinRoom', payload, (response) => {
+                log('joinRoom Response:', response);
+            });
+        }
+
+        function makeMove() {
+            const roomId = document.getElementById('roomIdInput').value;
+            const payload = {
+                game: 'TowerOfHanoi',
+                roomId: roomId,
+                fromCol: 0,
+                toCol: 1,
+                playerName: 'Tester1' // Assuming P1 turn first
+            };
+            log('Sending makeMove...', payload);
+            socket.emit('makeMove', payload, (response) => {
+                log('makeMove Callback:', response);
+            });
+        }
+
+        function checkLogs() {
+            log('Checking debug info...');
+        }
+    </script>
+</body>
+
+</html>

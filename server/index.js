@@ -189,7 +189,7 @@ io.on('connection', socket => {
     console.log(`[CREATE ROOM] Socket ${socket.id} attempting to create room for game ${game} as ${playerName}`);
 
     if (game === 'TowerOfHanoi') {
-      towerOfHanoi.createRoom(socket, { numDisks: numDisks || 3, playerName }, (response) => {
+      towerOfHanoi.createRoom(socket, { roomId, numDisks: numDisks || 3, playerName }, (response) => {
         if (response.success) {
           console.log(`[CREATE ROOM SUCCESS] Room ${response.roomId} created for TowerOfHanoi by ${playerName}`);
         } else {
