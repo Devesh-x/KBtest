@@ -188,7 +188,18 @@ class Sudoku {
             return callback({ error: 'Room ID is required' });
         }
 
-        const room = this.rooms[roomId];
+        let room = this.rooms[roomId];
+
+        // Case-insensitive fallback
+        if (!room) {
+            const normalizedId = roomId.toString().trim().toUpperCase();
+            console.log(`[SUDOKU DEBUG] Lookup failed for '${roomId}'. Trying normalized: '${normalizedId}'`);
+            const roomKey = Object.keys(this.rooms).find(key => key.toUpperCase() === normalizedId);
+            if (roomKey) {
+                room = this.rooms[roomKey];
+                console.log(`[SUDOKU DEBUG] Found match: '${roomKey}'`);
+            }
+        }
 
         if (!room) {
             return callback({ error: 'Room not found' });
@@ -224,8 +235,19 @@ class Sudoku {
 
     // Handles a player's move
     makeMove(socket, data, callback) {
-        const { roomId, row, col, num } = data;
-        const room = this.rooms[roomId];
+        const { roomId, row, col, value } = data;
+
+        let room = this.rooms[roomId];
+        // Case-insensitive fallback
+        if (!room) {
+            const normalizedId = roomId ? roomId.toString().trim().toUpperCase() : '';
+            console.log(`[SUDOKU DEBUG] Lookup failed for '${roomId}'. Trying normalized: '${normalizedId}'`);
+            const roomKey = Object.keys(this.rooms).find(key => key.toUpperCase() === normalizedId);
+            if (roomKey) {
+                room = this.rooms[roomKey];
+                console.log(`[SUDOKU DEBUG] Found match: '${roomKey}'`);
+            }
+        }
 
         if (!room) {
             return callback({ error: 'Room not found' });
